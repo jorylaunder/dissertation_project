@@ -7,7 +7,7 @@ wanted_devices = {"48:87:2D:9D:55:81": "Alpha"
                   }
 
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
-smooth_factor = 0.075
+smooth_factor = 0.1
 #each beacon's average rssi value
 alpha_rssi_avg = None
 beta_rssi_avg = None
