@@ -1,19 +1,31 @@
 import asyncio #allows asynchronous running
 from bleak import BleakScanner #bluetooth low energy (BLE) scanner
+import tkinter as tk
+
+#window creation
+#root = tk.Tk()
+#root.title("BLE Location Tracker")
+#root.geometry("800x600")
+#tk.Label(root, text="blah blah blah").pack()
+#root.mainloop()
 
 #MAC addresses of my BLE beacons and given name
-wanted_devices = {"48:87:2D:9D:55:81": "Alpha"
-                  #more to add
+wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
+                  "48:87:2D:9D:55:9E": "Beta",
+                  "48:87:2D:9D:55:CC": "Charlie",
+                  "48:87:2D:9D:55:99": "Delta",
+                  "48:87:2D:9D:55:A0": "Echo"
+                  
                   }
 
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
 smooth_factor = 0.1
 #each beacon's average rssi value
-alpha_rssi_avg = None
-beta_rssi_avg = None
-charlie_rssi_avg = None
-delta_rssi_avg = None
-echo_rssi_avg = None
+alpha_rssi_avg = 0.1
+beta_rssi_avg = 0.1
+charlie_rssi_avg = 0.1
+delta_rssi_avg = 0.1
+echo_rssi_avg = 0.1
 
 #called whenever a BLE packet is received
 def processBLEpacket(device, advertisement_data):
