@@ -1,13 +1,7 @@
 import asyncio #allows asynchronous running
 from bleak import BleakScanner #bluetooth low energy (BLE) scanner
 import tkinter as tk
-
-#window creation
-#root = tk.Tk()
-#root.title("BLE Location Tracker")
-#root.geometry("800x600")
-#tk.Label(root, text="blah blah blah").pack()
-#root.mainloop()
+import threading
 
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
@@ -86,4 +80,14 @@ async def main():
     while True:
         await asyncio.sleep(1)
 
-asyncio.run(main())
+def start_ble_loop():
+    asyncio.run(main())
+
+#window creation
+root = tk.Tk()
+root.title("BLE Location Tracker")
+root.geometry("800x600")
+tk.Label(root, text="BLE Location Tracker", font=("Arial", 16, "bold"), pady=20).pack()
+
+threading.Thread(target=start_ble_loop, daemon=True).start()
+root.mainloop()
