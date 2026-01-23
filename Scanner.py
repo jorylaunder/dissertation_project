@@ -1,7 +1,8 @@
 import asyncio #allows asynchronous running
 from bleak import BleakScanner #bluetooth low energy (BLE) scanner
-import tkinter as tk
+import tkinter as tk #gui
 import threading
+from PIL import Image, ImageTk
 
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
@@ -88,6 +89,43 @@ root = tk.Tk()
 root.title("BLE Location Tracker")
 root.geometry("800x600")
 tk.Label(root, text="BLE Location Tracker", font=("Arial", 16, "bold"), pady=20).pack()
+#width and height inputs frame 
+WidthHeight_frame = tk.Frame(root)
+WidthHeight_frame.pack(pady=20)
+
+#width and height inputs
+width_label = tk.Label(WidthHeight_frame, text="Width")
+width_label.grid(row=0, column=0, padx=10, pady=5)
+
+width_entry = tk.Entry(WidthHeight_frame)
+width_entry.grid(row=0, column=1, padx=10, pady=5)
+
+height_label = tk.Label(WidthHeight_frame, text="Height")
+height_label.grid(row=1, column=0, padx=10, pady=5)
+
+height_entry = tk.Entry(WidthHeight_frame)
+height_entry.grid(row=1, column=1, padx=10, pady=5)
+
+#image frame
+image_frame = tk.Frame(root)
+image_frame.pack(pady=20)
+
+#image
+img = Image.open("C:/Users/joryl/Downloads/widthHeightDiss.png")
+img = img.resize((450, 300))
+img_tk = ImageTk.PhotoImage(img)
+image_label = tk.Label(image_frame, image=img_tk)
+image_label.image = img_tk
+image_label.pack()
+
+"""#button frame
+button_frame = tk.Frame(root)
+button_frame.pack(expand=True)
+#buttons
+CreateNewMap_button = tk.Button(button_frame, text="Create new map", activebackground="grey", width="20", height="2", bd="3")
+CreateNewMap_button.pack(pady=0)
+LoadStoredMap_button = tk.Button(button_frame, text="Load stored map", activebackground="grey", width="20", height="2", bd="3")
+LoadStoredMap_button.pack(pady=15)"""
 
 threading.Thread(target=start_ble_loop, daemon=True).start()
 root.mainloop()
