@@ -84,6 +84,8 @@ async def main():
 def start_ble_loop():
     asyncio.run(main())
 
+#---------------------------------------------GUI---------------------------------------------#
+
 #window creation
 root = tk.Tk()
 root.title("BLE Location Tracker")
@@ -105,6 +107,10 @@ height_label.grid(row=1, column=0, padx=10, pady=5)
 
 height_entry = tk.Entry(WidthHeight_frame)
 height_entry.grid(row=1, column=1, padx=10, pady=5)
+
+#start button
+start_button = tk.Button(WidthHeight_frame, text="Start", activebackground="grey", width="5", height="1", bd="2")
+start_button.grid(row=1, column=3, padx=10, pady=5)
 
 #image frame
 image_frame = tk.Frame(root)
