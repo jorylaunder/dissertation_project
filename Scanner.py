@@ -4,6 +4,10 @@ import tkinter as tk #gui
 import threading
 from PIL import Image, ImageTk
 
+#width and height variables of room
+room_width = None
+room_height = None
+
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   "48:87:2D:9D:55:9E": "Beta",
@@ -81,6 +85,28 @@ async def main():
     while True:
         await asyncio.sleep(1)
 
+def calibrate_button_pressed():
+    global room_width, room_height
+
+    try:
+        #get values inputted into form fields
+        room_width = float(width_entry.get())
+        room_height = float(height_entry.get())
+    except ValueError:
+        #catch invalid inputs
+        print("Invalid inputs")
+        return
+    print(room_width, "x", room_height)
+    #call function to show the calibration page
+    show_calibration_page()
+
+def show_calibration_page():
+    #get rid of previous frames and title
+    WidthHeight_frame.pack_forget()
+    image_frame.pack_forget()
+    #put calibration page into window
+    calibration_page.pack(fill="both", expand=True)
+
 def start_ble_loop():
     asyncio.run(main())
 
@@ -90,7 +116,7 @@ def start_ble_loop():
 root = tk.Tk()
 root.title("BLE Location Tracker")
 root.geometry("800x600")
-tk.Label(root, text="BLE Location Tracker", font=("Arial", 16, "bold"), pady=20).pack()
+page_title = tk.Label(root, text="BLE Location Tracker", font=("Arial", 16, "bold"), pady=20).pack()
 #width and height inputs frame 
 WidthHeight_frame = tk.Frame(root)
 WidthHeight_frame.pack(pady=20)
@@ -108,9 +134,9 @@ height_label.grid(row=1, column=0, padx=10, pady=5)
 height_entry = tk.Entry(WidthHeight_frame)
 height_entry.grid(row=1, column=1, padx=10, pady=5)
 
-#start button
-start_button = tk.Button(WidthHeight_frame, text="Start", activebackground="grey", width="5", height="1", bd="2")
-start_button.grid(row=1, column=3, padx=10, pady=5)
+#calibrate button
+calibrate_button = tk.Button(WidthHeight_frame, text="Calibrate", activebackground="grey", width="8", height="1", bd="2", command=calibrate_button_pressed)
+calibrate_button.grid(row=1, column=3, padx=10, pady=5)
 
 #image frame
 image_frame = tk.Frame(root)
@@ -132,6 +158,10 @@ CreateNewMap_button = tk.Button(button_frame, text="Create new map", activebackg
 CreateNewMap_button.pack(pady=0)
 LoadStoredMap_button = tk.Button(button_frame, text="Load stored map", activebackground="grey", width="20", height="2", bd="3")
 LoadStoredMap_button.pack(pady=15)"""
+
+#calibration page
+calibration_page = tk.Frame(root)
+tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20).pack()
 
 threading.Thread(target=start_ble_loop, daemon=True).start()
 root.mainloop()
