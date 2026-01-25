@@ -106,6 +106,8 @@ def show_calibration_page():
     image_frame.pack_forget()
     #put calibration page into window
     calibration_page.pack(fill="both", expand=True)
+    #calibrate_button_1.grid(row=0, column=0, padx=10, pady=5)
+    #calibrate_button_2.grid(row=0, column=2, padx=10, pady=5)
 
 def start_ble_loop():
     asyncio.run(main())
@@ -161,7 +163,46 @@ LoadStoredMap_button.pack(pady=15)"""
 
 #calibration page
 calibration_page = tk.Frame(root)
-tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20).pack()
+calibration_page_title = tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20)
+calibration_page_title.pack()
+#calibration image
+calibration_image = Image.open("C:/Users/joryl/Downloads/calibration image.png")
+calibration_image = calibration_image.resize((280, 200))
+calibration_image_tk = ImageTk.PhotoImage(calibration_image)
+calibration_image_label = tk.Label(calibration_page, image=calibration_image_tk)
+calibration_image_label.image = calibration_image_tk
+calibration_image_label.pack()
+#calibration buttons frame
+calibration_buttons_frame = tk.Frame(calibration_page)
+calibration_buttons_frame.pack()
+#calibration buttons
+cal_button_1 = tk.Button(calibration_buttons_frame, text="1", activebackground="grey", width="3", height="1", bd="2")
+cal_button_1.grid(row=0, column=0, padx=5, pady=5)
+cal_button_2 = tk.Button(calibration_buttons_frame, text="2", activebackground="grey", width="3", height="1", bd="2")
+cal_button_2.grid(row=0, column=1, padx=5, pady=5)
+cal_button_3 = tk.Button(calibration_buttons_frame, text="3", activebackground="grey", width="3", height="1", bd="2")
+cal_button_3.grid(row=0, column=2, padx=5, pady=5)
+cal_button_4 = tk.Button(calibration_buttons_frame, text="4", activebackground="grey", width="3", height="1", bd="2")
+cal_button_4.grid(row=0, column=3, padx=5, pady=5)
+cal_button_5 = tk.Button(calibration_buttons_frame, text="5", activebackground="grey", width="3", height="1", bd="2")
+cal_button_5.grid(row=0, column=4, padx=5, pady=5)
+cal_button_6 = tk.Button(calibration_buttons_frame, text="6", activebackground="grey", width="3", height="1", bd="2")
+cal_button_6.grid(row=0, column=5, padx=5, pady=5)
+cal_button_7 = tk.Button(calibration_buttons_frame, text="7", activebackground="grey", width="3", height="1", bd="2")
+cal_button_7.grid(row=0, column=6, padx=5, pady=5)
+cal_button_8 = tk.Button(calibration_buttons_frame, text="8", activebackground="grey", width="3", height="1", bd="2")
+cal_button_8.grid(row=0, column=7, padx=5, pady=5)
+cal_button_9 = tk.Button(calibration_buttons_frame, text="9", activebackground="grey", width="3", height="1", bd="2")
+cal_button_9.grid(row=0, column=8, padx=5, pady=5)
+cal_button_10 = tk.Button(calibration_buttons_frame, text="10", activebackground="grey", width="3", height="1", bd="2")
+cal_button_10.grid(row=0, column=9, padx=5, pady=5)
+cal_button_11 = tk.Button(calibration_buttons_frame, text="11", activebackground="grey", width="3", height="1", bd="2")
+cal_button_11.grid(row=0, column=10, padx=5, pady=5)
+cal_button_12 = tk.Button(calibration_buttons_frame, text="12", activebackground="grey", width="3", height="1", bd="2")
+cal_button_12.grid(row=0, column=12, padx=5, pady=5)
+cal_button_13 = tk.Button(calibration_buttons_frame, text="13", activebackground="grey", width="3", height="1", bd="2")
+cal_button_13.grid(row=0, column=13, padx=5, pady=5)
+
 
 threading.Thread(target=start_ble_loop, daemon=True).start()
 root.mainloop()
