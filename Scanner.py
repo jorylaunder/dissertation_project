@@ -1,19 +1,43 @@
 import asyncio #allows asynchronous running
 from bleak import BleakScanner #bluetooth low energy (BLE) scanner
 import tkinter as tk #gui
-import threading
-from PIL import Image, ImageTk
+import threading #running of gui and scanning
+from PIL import Image, ImageTk #images in gui
+import time
 
 #width and height variables of room
 room_width = None
 room_height = None
+
+#calibration variables
+current_point = 1
+max_point = 13
+samples_per_point = 25
+collecting = False
+
+#calibration points dictionary
+calibration_data = {
+    1: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    2: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    3: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    4: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    5: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    6: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    7: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    8: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    9: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    10: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    11: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    12: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    13: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+}
 
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   "48:87:2D:9D:55:9E": "Beta",
                   "48:87:2D:9D:55:CC": "Charlie",
                   "48:87:2D:9D:55:99": "Delta",
-                  "48:87:2D:9D:55:A0": "Echo"
+                  "48:87:2D:9D:55:A0": "Echo" #spare beacon for now
                   
                   }
 
@@ -34,8 +58,12 @@ def processBLEpacket(device, advertisement_data):
     global delta_rssi_avg
     global echo_rssi_avg
 
+    global collecting
+    global current_point
+
     #prints name and RSSI of my BLE beacons only
     if device.address in wanted_devices:
+
         #get given name and rssi value
         name = wanted_devices[device.address]
         rssi = advertisement_data.rssi
@@ -76,6 +104,46 @@ def processBLEpacket(device, advertisement_data):
                 echo_rssi_avg = smooth_factor * rssi + (1 - smooth_factor) * echo_rssi_avg
             print(f"{name} - RSSI: {echo_rssi_avg:.1f}")
 
+#----------------------------------------------------------------------------FINGER PRINTING-----------------------------------------------------------------------------------#
+        #only get the name beacons we want
+        if (collecting == True) and name in calibration_data[current_point]:
+
+            #get raw rssi values rather than EMA until full
+            if len(calibration_data[current_point][name]) < samples_per_point:
+                calibration_data[current_point][name].append(rssi)
+
+            #get count for progress
+            count = sum(len(calibration_data[current_point][i]) for i in ["Alpha", "Beta", "Charlie", "Delta"])
+            #update gui
+            counter.config(text=f"Samples collected: {count}/100")
+
+            #check to see if each name at that current point is full
+            all_done = True
+            for i in ["Alpha", "Beta", "Charlie", "Delta"]:
+                sample_count = len(calibration_data[current_point][i])
+                if sample_count < samples_per_point:
+                    all_done = False
+                    break
+            
+            #increment current_point amd print confirmation
+            if all_done == True:
+                collecting = False
+                status.config(text=f"Finished point {current_point}")
+
+                current_point = current_point + 1
+
+                time.sleep(2)
+
+                if current_point > max_point:
+                    status.config(text=f"Calibration complete")
+
+                else:
+                    status.config(text=f"move to point {current_point} and press start")
+
+#----------------------------------------------------------------------------END OF FINGER PRINTING----------------------------------------------------------------------------#
+
+#----------------------------------------------------------------------------MAIN----------------------------------------------------------------------------------------------#
+
 async def main():
     #create scanner object
     #whenever a BLE signal is received call processBLEpacket
@@ -85,6 +153,14 @@ async def main():
     while True:
         await asyncio.sleep(1)
 
+def start_ble_loop():
+    asyncio.run(main())
+
+#----------------------------------------------------------------------------END OF MAIN---------------------------------------------------------------------------------------#
+
+#----------------------------------------------------------------------------CHANGING PAGES------------------------------------------------------------------------------------#
+
+#calibration button pressed on first page
 def calibrate_button_pressed():
     global room_width, room_height
 
@@ -106,13 +182,34 @@ def show_calibration_page():
     image_frame.pack_forget()
     #put calibration page into window
     calibration_page.pack(fill="both", expand=True)
-    #calibrate_button_1.grid(row=0, column=0, padx=10, pady=5)
-    #calibrate_button_2.grid(row=0, column=2, padx=10, pady=5)
 
-def start_ble_loop():
-    asyncio.run(main())
+#----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
-#---------------------------------------------GUI---------------------------------------------#
+#----------------------------------------------------------------------------CALIBRATION---------------------------------------------------------------------------------------#
+
+#when start button is pressed on calibration page
+def cal_start_button_pressed():
+    global collecting, current_point
+
+    if current_point > max_point:
+        status.config(text="calibration already complete")
+        return
+    
+    #clear current point if it happens to have any in it
+    for i in ["Alpha", "Beta", "Charlie", "Delta"]:
+        calibration_data[current_point][i].clear()
+
+    # reset calibration status labels
+    counter.config(text="Samples collected: 0/100")
+    status.config(text="")
+
+    collecting = True
+
+
+#----------------------------------------------------------------------------END OF CALIBRATION--------------------------------------------------------------------------------#
+
+
+#----------------------------------------------------------------------------GUI-----------------------------------------------------------------------------------------------#
 
 #window creation
 root = tk.Tk()
@@ -175,10 +272,16 @@ calibration_image_label.pack()
 #calibration buttons frame
 calibration_buttons_frame = tk.Frame(calibration_page)
 calibration_buttons_frame.pack()
-#calibration buttons
-cal_button_1 = tk.Button(calibration_buttons_frame, text="1", activebackground="grey", width="3", height="1", bd="2")
-cal_button_1.grid(row=0, column=0, padx=5, pady=5)
-cal_button_2 = tk.Button(calibration_buttons_frame, text="2", activebackground="grey", width="3", height="1", bd="2")
+#calibration start button
+cal_start_button = tk.Button(calibration_buttons_frame, text="Start", activebackground="grey", width="6", height="1", bd="2", command=cal_start_button_pressed)
+cal_start_button.grid(row=0, column=0, padx=5, pady=5)
+#calibration progress text
+counter = tk.Label(calibration_buttons_frame, text="Samples collected: 0/100", font=("Arial", 10))
+counter.grid(row=1, column=0, padx=5, pady=5)
+status = tk.Label(calibration_buttons_frame, text="", font=("Arial", 10))
+status.grid(row=2, column=0, pady=5)
+
+"""cal_button_2 = tk.Button(calibration_buttons_frame, text="2", activebackground="grey", width="3", height="1", bd="2")
 cal_button_2.grid(row=0, column=1, padx=5, pady=5)
 cal_button_3 = tk.Button(calibration_buttons_frame, text="3", activebackground="grey", width="3", height="1", bd="2")
 cal_button_3.grid(row=0, column=2, padx=5, pady=5)
@@ -201,8 +304,8 @@ cal_button_11.grid(row=0, column=10, padx=5, pady=5)
 cal_button_12 = tk.Button(calibration_buttons_frame, text="12", activebackground="grey", width="3", height="1", bd="2")
 cal_button_12.grid(row=0, column=12, padx=5, pady=5)
 cal_button_13 = tk.Button(calibration_buttons_frame, text="13", activebackground="grey", width="3", height="1", bd="2")
-cal_button_13.grid(row=0, column=13, padx=5, pady=5)
+cal_button_13.grid(row=0, column=13, padx=5, pady=5)"""
 
-
+#----------------------------------------------------------------------------END OF GUI----------------------------------------------------------------------------------------#
 threading.Thread(target=start_ble_loop, daemon=True).start()
 root.mainloop()
