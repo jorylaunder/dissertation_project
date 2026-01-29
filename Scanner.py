@@ -139,6 +139,8 @@ def processBLEpacket(device, advertisement_data):
 
                 if current_point > max_point:
                     status.config(text=f"Calibration complete")
+                    time.sleep(2)
+                    show_map_page()
 
                 else:
                     status.config(text=f"move to point {current_point} and press start")
@@ -180,11 +182,18 @@ def cal_page_button_pressed():
     show_calibration_page()
 
 def show_calibration_page():
-    #get rid of previous frames and title
+    #get rid of previous frames 
     WidthHeight_frame.pack_forget()
     image_frame.pack_forget()
     #put calibration page into window
     calibration_page.pack(fill="both", expand=True)
+
+def show_map_page():
+    #get rid of previous frames
+    calibration_page.pack_forget()
+    calibration_buttons_frame.pack_forget()
+    #show map page
+    map_page.pack(fill="both", expand=True)
 
 #----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
@@ -252,15 +261,6 @@ image_label = tk.Label(image_frame, image=img_tk)
 image_label.image = img_tk
 image_label.pack()
 
-"""#button frame
-button_frame = tk.Frame(root)
-button_frame.pack(expand=True)
-#buttons
-CreateNewMap_button = tk.Button(button_frame, text="Create new map", activebackground="grey", width="20", height="2", bd="3")
-CreateNewMap_button.pack(pady=0)
-LoadStoredMap_button = tk.Button(button_frame, text="Load stored map", activebackground="grey", width="20", height="2", bd="3")
-LoadStoredMap_button.pack(pady=15)"""
-
 #calibration page
 calibration_page = tk.Frame(root)
 calibration_page_title = tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20)
@@ -284,30 +284,10 @@ counter.grid(row=1, column=0, padx=5, pady=5)
 status = tk.Label(calibration_buttons_frame, text="", font=("Arial", 10))
 status.grid(row=2, column=0, pady=5)
 
-"""cal_button_2 = tk.Button(calibration_buttons_frame, text="2", activebackground="grey", width="3", height="1", bd="2")
-cal_button_2.grid(row=0, column=1, padx=5, pady=5)
-cal_button_3 = tk.Button(calibration_buttons_frame, text="3", activebackground="grey", width="3", height="1", bd="2")
-cal_button_3.grid(row=0, column=2, padx=5, pady=5)
-cal_button_4 = tk.Button(calibration_buttons_frame, text="4", activebackground="grey", width="3", height="1", bd="2")
-cal_button_4.grid(row=0, column=3, padx=5, pady=5)
-cal_button_5 = tk.Button(calibration_buttons_frame, text="5", activebackground="grey", width="3", height="1", bd="2")
-cal_button_5.grid(row=0, column=4, padx=5, pady=5)
-cal_button_6 = tk.Button(calibration_buttons_frame, text="6", activebackground="grey", width="3", height="1", bd="2")
-cal_button_6.grid(row=0, column=5, padx=5, pady=5)
-cal_button_7 = tk.Button(calibration_buttons_frame, text="7", activebackground="grey", width="3", height="1", bd="2")
-cal_button_7.grid(row=0, column=6, padx=5, pady=5)
-cal_button_8 = tk.Button(calibration_buttons_frame, text="8", activebackground="grey", width="3", height="1", bd="2")
-cal_button_8.grid(row=0, column=7, padx=5, pady=5)
-cal_button_9 = tk.Button(calibration_buttons_frame, text="9", activebackground="grey", width="3", height="1", bd="2")
-cal_button_9.grid(row=0, column=8, padx=5, pady=5)
-cal_button_10 = tk.Button(calibration_buttons_frame, text="10", activebackground="grey", width="3", height="1", bd="2")
-cal_button_10.grid(row=0, column=9, padx=5, pady=5)
-cal_button_11 = tk.Button(calibration_buttons_frame, text="11", activebackground="grey", width="3", height="1", bd="2")
-cal_button_11.grid(row=0, column=10, padx=5, pady=5)
-cal_button_12 = tk.Button(calibration_buttons_frame, text="12", activebackground="grey", width="3", height="1", bd="2")
-cal_button_12.grid(row=0, column=12, padx=5, pady=5)
-cal_button_13 = tk.Button(calibration_buttons_frame, text="13", activebackground="grey", width="3", height="1", bd="2")
-cal_button_13.grid(row=0, column=13, padx=5, pady=5)"""
+#map page
+map_page = tk.Frame(root)
+map_page_title = tk.Label(map_page, text="Map", font=("Arial", 12, "normal"), pady=20)
+map_page_title.pack()
 
 #----------------------------------------------------------------------------END OF GUI----------------------------------------------------------------------------------------#
 threading.Thread(target=start_ble_loop, daemon=True).start()
