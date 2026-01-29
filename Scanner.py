@@ -11,8 +11,8 @@ room_height = None
 
 #calibration variables
 current_point = 1
-max_point = 13
-samples_per_point = 25
+max_point = 16
+samples_per_point = 50
 collecting = False
 
 #calibration points dictionary
@@ -30,6 +30,9 @@ calibration_data = {
     11: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
     12: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
     13: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    14: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    15: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+    16: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
 }
 
 #MAC addresses of my BLE beacons and given name
@@ -115,7 +118,7 @@ def processBLEpacket(device, advertisement_data):
             #get count for progress
             count = sum(len(calibration_data[current_point][i]) for i in ["Alpha", "Beta", "Charlie", "Delta"])
             #update gui
-            counter.config(text=f"Samples collected: {count}/100")
+            counter.config(text=f"Samples collected: {count}/200")
 
             #check to see if each name at that current point is full
             all_done = True
@@ -161,7 +164,7 @@ def start_ble_loop():
 #----------------------------------------------------------------------------CHANGING PAGES------------------------------------------------------------------------------------#
 
 #calibration button pressed on first page
-def calibrate_button_pressed():
+def cal_page_button_pressed():
     global room_width, room_height
 
     try:
@@ -200,7 +203,7 @@ def cal_start_button_pressed():
         calibration_data[current_point][i].clear()
 
     # reset calibration status labels
-    counter.config(text="Samples collected: 0/100")
+    counter.config(text="Samples collected: 0/200")
     status.config(text="")
 
     collecting = True
@@ -234,7 +237,7 @@ height_entry = tk.Entry(WidthHeight_frame)
 height_entry.grid(row=1, column=1, padx=10, pady=5)
 
 #calibrate button
-calibrate_button = tk.Button(WidthHeight_frame, text="Calibrate", activebackground="grey", width="8", height="1", bd="2", command=calibrate_button_pressed)
+calibrate_button = tk.Button(WidthHeight_frame, text="Calibrate", activebackground="grey", width="8", height="1", bd="2", command=cal_page_button_pressed)
 calibrate_button.grid(row=1, column=3, padx=10, pady=5)
 
 #image frame
@@ -263,7 +266,7 @@ calibration_page = tk.Frame(root)
 calibration_page_title = tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20)
 calibration_page_title.pack()
 #calibration image
-calibration_image = Image.open("C:/Users/joryl/Downloads/calibration image.png")
+calibration_image = Image.open("C:/Users/joryl/Downloads/updated_calibration_example_image.png")
 calibration_image = calibration_image.resize((280, 200))
 calibration_image_tk = ImageTk.PhotoImage(calibration_image)
 calibration_image_label = tk.Label(calibration_page, image=calibration_image_tk)
@@ -276,7 +279,7 @@ calibration_buttons_frame.pack()
 cal_start_button = tk.Button(calibration_buttons_frame, text="Start", activebackground="grey", width="6", height="1", bd="2", command=cal_start_button_pressed)
 cal_start_button.grid(row=0, column=0, padx=5, pady=5)
 #calibration progress text
-counter = tk.Label(calibration_buttons_frame, text="Samples collected: 0/100", font=("Arial", 10))
+counter = tk.Label(calibration_buttons_frame, text="Samples collected: 0/200", font=("Arial", 10))
 counter.grid(row=1, column=0, padx=5, pady=5)
 status = tk.Label(calibration_buttons_frame, text="", font=("Arial", 10))
 status.grid(row=2, column=0, pady=5)
