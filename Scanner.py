@@ -194,6 +194,8 @@ def show_map_page():
     calibration_buttons_frame.pack_forget()
     #show map page
     map_page.pack(fill="both", expand=True)
+    #draw map
+    draw_map()
 
 #----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
@@ -220,6 +222,52 @@ def cal_start_button_pressed():
 
 #----------------------------------------------------------------------------END OF CALIBRATION--------------------------------------------------------------------------------#
 
+#----------------------------------------------------------------------------MAP-----------------------------------------------------------------------------------------------#
+
+def draw_map():
+
+    #add padding 
+    padding = 20
+    usable_width = map_width - 2 * padding
+    usable_height = map_height - 2 * padding
+
+    #get scale room
+    scale = min(usable_width / room_width, usable_height / room_height)
+
+    draw_width = room_width * scale
+    draw_height = room_height * scale
+
+    #centre map in canvas, leftover space from grid
+    x0 = (map_width - draw_width) / 2    #left edge
+    y0 = (map_height - draw_height) / 2   #top edge
+    x1 = x0 + draw_width   #right edge
+    y1 = y0 + draw_height    #bottom edfe
+
+    #draw map outline
+    map.create_rectangle(x0, y0, x1, y1, width=2)
+
+    #draw 4x4 grid
+    cell_width = draw_width / 4  #width of a column or cell
+    cell_height = draw_height / 4  #height of a row or cell
+
+    #map.create_line(x_start, y_start, x_end, y_end)
+    #vertical grid lines
+    map.create_line(x0 + cell_width, y0, x0 + cell_width, y1)
+    map.create_line(x0 + 2 * cell_width, y0, x0 + 2 * cell_width, y1)
+    map.create_line(x0 + 3 * cell_width, y0, x0 + 3 * cell_width, y1)
+
+    #horizontal grid lines
+    map.create_line(x0, y0 + cell_height, x1, y0 + cell_height)
+    map.create_line(x0, y0 + 2 * cell_height, x1, y0 + 2 * cell_height)
+    map.create_line(x0, y0 + 3 * cell_height, x1, y0 + 3 * cell_height)
+
+    #add beacons into corners
+    label_offset = 10  #prevernt overlapping
+    map.create_text(x0 + label_offset, y0 + label_offset, text="A", anchor="nw", font=("Arial", 12, "bold"), fill="blue")
+    map.create_text(x1 - label_offset, y0 + label_offset, text="B", anchor="ne", font=("Arial", 12, "bold"), fill="blue")
+    map.create_text(x0 + label_offset, y1 - label_offset, text="C", anchor="sw", font=("Arial", 12, "bold"), fill="blue")
+    map.create_text(x1 - label_offset, y1 - label_offset, text="D", anchor="se", font=("Arial", 12, "bold"), fill="blue")
+#----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------GUI-----------------------------------------------------------------------------------------------#
 
@@ -288,6 +336,17 @@ status.grid(row=2, column=0, pady=5)
 map_page = tk.Frame(root)
 map_page_title = tk.Label(map_page, text="Map", font=("Arial", 12, "normal"), pady=20)
 map_page_title.pack()
+
+#canvas dimensions for map
+map_width = 450
+map_height = 450
+#map
+map = tk.Canvas(map_page, width=map_width, height=map_height, bg="white")
+map.pack(pady=10)
+
+#test button DELETE
+test_button = tk.Button(calibration_buttons_frame, text="Skip", activebackground="grey", width="6", height="1", bd="2", command=show_map_page)
+test_button.grid(row=1, column=1, padx=5, pady=5)
 
 #----------------------------------------------------------------------------END OF GUI----------------------------------------------------------------------------------------#
 threading.Thread(target=start_ble_loop, daemon=True).start()
