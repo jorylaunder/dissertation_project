@@ -4,6 +4,7 @@ import tkinter as tk #gui
 import threading #running of gui and scanning
 from PIL import Image, ImageTk #images in gui
 import time
+import math #for distance calc
 
 #width and height variables of room
 room_width = None
@@ -33,6 +34,46 @@ calibration_data = {
     14: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
     15: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
     16: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
+}
+
+#point coordinates using a 4x4 grid where we snake left to right top to bottom, coords are (row, col)
+point_coordinates = {
+    1: (0, 0),
+    2: (0, 1),
+    3: (0, 2),
+    4: (0, 3),
+    5: (1, 3),
+    6: (1, 2),
+    7: (1, 1),
+    8: (1, 0),
+    9: (2, 0),
+    10: (2, 1),
+    11: (2, 2),
+    12: (2, 3),
+    13: (3, 3),
+    14: (3, 2),
+    15: (3, 1),
+    16: (3, 0)
+}
+
+#dictionary for calculating the distance at each point to each beacon given the room width and height
+point_to_beacon_distances = {
+    1: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    2: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    3: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    4: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    5: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    6: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    7: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    8: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    9: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    10: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    11: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    12: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    13: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    14: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    15: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
+    16: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
 }
 
 #MAC addresses of my BLE beacons and given name
@@ -178,7 +219,8 @@ def cal_page_button_pressed():
         print("Invalid inputs")
         return
     print(room_width, "x", room_height)
-    #call function to show the calibration page
+    #call function to show the calibration page and calculate distances from each point to each beacon
+    calculate_distances(room_width, room_height)
     show_calibration_page()
 
 def show_calibration_page():
@@ -219,6 +261,40 @@ def cal_start_button_pressed():
 
     collecting = True
 
+#calculating the point to beacon distances
+def calculate_distances(room_width, room_height):
+
+    actual_cell_width = room_width / 4
+    actual_cell_height = room_height / 4
+
+    #beacon positions, a top left, b top right, c bottom left, d bottom right
+    beacon_coordinates = {
+            "Alpha": (0.0, 0.0),
+            "Beta": (room_width, 0.0),
+            "Charlie": (0.0, room_height),
+            "Delta": (room_width, room_height)
+        }
+
+    for point in range (1,17):
+        #get coordinates of each point 
+        row = point_coordinates[point][0]
+        column = point_coordinates[point][1]
+        #calculate centre of each square i.e. the point
+        x_centre = (column + 0.5) * actual_cell_width
+        y_centre = (row + 0.5) * actual_cell_height
+
+        #get coordinates of each beacon
+        for beacon in beacon_coordinates:
+            beacon_x = beacon_coordinates[beacon][0]
+            beacon_y = beacon_coordinates[beacon][1]
+
+            #calculate point to beacon distances using pythagorean theorem
+            point_to_beacon_distances[point][beacon] = math.sqrt((x_centre - beacon_x)**2 + (y_centre - beacon_y)**2)
+
+        #printing for testing purposes
+        print("\npoint to beacon distances:")
+        for point, distances in point_to_beacon_distances.items():
+            print(f"point {point}: {distances}")
 
 #----------------------------------------------------------------------------END OF CALIBRATION--------------------------------------------------------------------------------#
 
