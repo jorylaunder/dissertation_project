@@ -296,6 +296,59 @@ def calculate_distances(room_width, room_height):
         for point, distances in point_to_beacon_distances.items():
             print(f"point {point}: {distances}")
 
+        
+    #log distance path loss model
+    def rssi_to_distance_model():
+        
+        #model for each beacon
+        models = {}
+
+        beacons = ["Alpha", "Beta", "Charlie", "Delta"]
+
+        for beacon in beacons:
+            log_distances = []
+            average_rssi = []
+
+            #get all my calibration data
+            for point in range(1,17):
+                distance = point_to_beacon_distances[point][beacon]
+                rssi_samples = calibration_data[point][beacon]
+
+                log_distances.append(math.log10(distance))
+                average_rssi.append(sum(rssi_samples) / len(rssi_samples))
+                
+            #linear regression 
+            # y = Mx + C
+            # RSSI = M*log10(distance) + C
+            #number of calibration points for this beacon, i.e. 16
+            n = len(log_distances)
+
+            #plotting a graph where x is log distance and y is rssi
+            #get averages of these
+            x_mean = sum(log_distances) / n
+            y_mean = sum(average_rssi) / n
+
+            #for the gradient M
+            numerator = 0
+            denominator = 0
+
+            for i in range(n):
+                #essentially how far is the log distance from the x mean and how far is the rssi from the y mean, i.e. x deviation * y deviation
+                numerator = numerator + (log_distances[i] - x_mean) * (average_rssi[i] - y_mean)
+                #keeps the spread of x values 
+                denominator = denominator + (log_distances[i] - x_mean) ** 2
+
+            #gradient M
+            distance_to_rssi_relationship = numerator / denominator
+
+            #intercept C = y - Mx
+            distance_spread = y_mean - distance_to_rssi_relationship * x_mean
+
+            #store model for beacon
+            models[beacon] = (distance_spread, distance_to_rssi_relationship)
+                
+        return models
+
 #----------------------------------------------------------------------------END OF CALIBRATION--------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------MAP-----------------------------------------------------------------------------------------------#
@@ -343,6 +396,8 @@ def draw_map():
     map.create_text(x1 - label_offset, y0 + label_offset, text="B", anchor="ne", font=("Arial", 12, "bold"), fill="blue")
     map.create_text(x0 + label_offset, y1 - label_offset, text="C", anchor="sw", font=("Arial", 12, "bold"), fill="blue")
     map.create_text(x1 - label_offset, y1 - label_offset, text="D", anchor="se", font=("Arial", 12, "bold"), fill="blue")
+
+    
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------GUI-----------------------------------------------------------------------------------------------#
