@@ -88,11 +88,11 @@ wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
 smooth_factor = 0.1
 #each beacon's average rssi value
-alpha_rssi_avg = 0.1
-beta_rssi_avg = 0.1
-charlie_rssi_avg = 0.1
-delta_rssi_avg = 0.1
-echo_rssi_avg = 0.1
+alpha_rssi_avg = None
+beta_rssi_avg = None
+charlie_rssi_avg = None
+delta_rssi_avg = None
+echo_rssi_avg = None
 
 #called whenever a BLE packet is received
 def processBLEpacket(device, advertisement_data):
@@ -181,11 +181,19 @@ def processBLEpacket(device, advertisement_data):
                 if current_point > max_point:
                     status.config(text=f"Calibration complete")
                     time.sleep(2)
+                    
                     show_map_page()
+                    global models
+                    models = rssi_to_distance_model()
 
                 else:
                     status.config(text=f"move to point {current_point} and press start")
 
+        if models is not None:
+            distances = rssi_to_distance_calculation(models)
+            print("Distance from each beacon:", distances)
+
+            #WILL CALL TRILATERATION HERE
 #----------------------------------------------------------------------------END OF FINGER PRINTING----------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------MAIN----------------------------------------------------------------------------------------------#
@@ -297,8 +305,8 @@ def calculate_distances(room_width, room_height):
             print(f"point {point}: {distances}")
 
         
-    #log distance path loss model
-    def rssi_to_distance_model():
+#log distance path loss model
+def rssi_to_distance_model():
         
         #model for each beacon
         models = {}
@@ -399,6 +407,42 @@ def draw_map():
 
     
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
+
+#----------------------------------------------------------------------------TRILATERATION-------------------------------------------------------------------------------------#
+
+#use models and rearrange equation to get distance
+def rssi_to_distance_calculation(models):
+
+    distances = {}
+
+    ema_rssi_values = {
+        "Alpha": alpha_rssi_avg,
+        "Beta": beta_rssi_avg,
+        "Charlie": charlie_rssi_avg,
+        "Delta": delta_rssi_avg
+    }
+
+    for beacon in ema_rssi_values:
+        rssi = ema_rssi_values[beacon]
+
+        # get model parameters
+        distance_spread = models[beacon][0]
+        distance_to_rssi_relationship = models[beacon][1]
+
+        # find distance, rearranging the log distance path loss model
+        distance = 10 ** ((rssi - distance_spread) / distance_to_rssi_relationship)
+
+        distances[beacon] = distance
+
+    return distances
+
+    #actual trilateration function
+    def trilateration():
+        return
+
+
+
+#----------------------------------------------------------------------------END OF TRILATERATION------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------GUI-----------------------------------------------------------------------------------------------#
 
