@@ -16,6 +16,8 @@ max_point = 16
 samples_per_point = 50
 collecting = False
 
+models = None
+
 #calibration points dictionary
 calibration_data = {
     1: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
@@ -105,6 +107,8 @@ def processBLEpacket(device, advertisement_data):
     global collecting
     global current_point
 
+    global models
+
     #prints name and RSSI of my BLE beacons only
     if device.address in wanted_devices:
 
@@ -183,7 +187,6 @@ def processBLEpacket(device, advertisement_data):
                     time.sleep(2)
                     
                     show_map_page()
-                    global models
                     models = rssi_to_distance_model()
 
                 else:
@@ -309,6 +312,7 @@ def calculate_distances(room_width, room_height):
 def rssi_to_distance_model():
         
         #model for each beacon
+        global models
         models = {}
 
         beacons = ["Alpha", "Beta", "Charlie", "Delta"]
@@ -424,6 +428,9 @@ def rssi_to_distance_calculation(models):
 
     for beacon in ema_rssi_values:
         rssi = ema_rssi_values[beacon]
+
+        if rssi == None:
+            continue
 
         # get model parameters
         distance_spread = models[beacon][0]
