@@ -5,6 +5,8 @@ import threading #running of gui and scanning
 from PIL import Image, ImageTk #images in gui
 import time
 import math #for distance calc
+import json #for saving a map
+from tkinter import filedialog 
 
 #width and height variables of room
 room_width = None
@@ -250,6 +252,21 @@ def show_map_page():
     #draw map
     draw_map()
 
+#when save button is pressed
+def save_map_button_pressed():
+    filename = filedialog.asksaveasfilename(defaultextension=".json", filetype=[("JSON files", "*.json")])
+
+    if filename:
+        save_map(filename)
+
+#when load map button is pressed
+def load_map_button_pressed():
+    filename = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+
+    if filename:
+        load_map(filename)
+        show_map_page()
+
 #----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------CALIBRATION---------------------------------------------------------------------------------------#
@@ -367,6 +384,9 @@ def rssi_to_distance_model():
 
 def draw_map():
 
+    #prevent drawing over any existing maps
+    map.delete("all")
+
     #add padding 
     padding = 20
     usable_width = map_width - 2 * padding
@@ -409,6 +429,46 @@ def draw_map():
     map.create_text(x0 + label_offset, y1 - label_offset, text="C", anchor="sw", font=("Arial", 12, "bold"), fill="blue")
     map.create_text(x1 - label_offset, y1 - label_offset, text="D", anchor="se", font=("Arial", 12, "bold"), fill="blue")
 
+    #function to save map
+def save_map(filename):
+    data = {"room_width": room_width,
+            "room_height": room_height,
+            "calibration_data": calibration_data
+            }
+        
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"Map saved to {filename}")
+
+#function to load a saved map
+def load_map(filename):
+    global room_width, room_height, calibration_data, models, current_point, collecting
+
+    #prevent calibration from runnning again
+    current_point = max_point + 1
+    collecting = False
+
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    room_width = data["room_width"]
+    room_height = data["room_height"]
+
+    #rebuild the dictionary from json string
+    calibration_data = {
+        int(point): data["calibration_data"][point]
+        for point in data["calibration_data"]
+    }
+
+    #calculate all the calibration data again
+    calculate_distances(room_width, room_height)
+    models = rssi_to_distance_model()
+
+    print(f"Map loaded from {filename}")
+
+    return models
+
     
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
@@ -418,6 +478,10 @@ def draw_map():
 def rssi_to_distance_calculation(models):
 
     distances = {}
+
+    #set max distance using actual max distance and tolerance
+    tolerance = 1.2
+    max_distance = math.sqrt(room_height**2 + room_width**2) * tolerance
 
     ema_rssi_values = {
         "Alpha": alpha_rssi_avg,
@@ -439,6 +503,9 @@ def rssi_to_distance_calculation(models):
         # find distance, rearranging the log distance path loss model
         distance = 10 ** ((rssi - distance_spread) / distance_to_rssi_relationship)
 
+        if distance > max_distance:
+            distance = max_distance
+        
         distances[beacon] = distance
 
     return distances
@@ -479,6 +546,10 @@ height_entry.grid(row=1, column=1, padx=10, pady=5)
 calibrate_button = tk.Button(WidthHeight_frame, text="Calibrate", activebackground="grey", width="8", height="1", bd="2", command=cal_page_button_pressed)
 calibrate_button.grid(row=1, column=3, padx=10, pady=5)
 
+#load map button
+load_map_button = tk.Button(WidthHeight_frame, text="Load map", activebackground="grey", width="10", height="1", bd="2", command=load_map_button_pressed)
+load_map_button.grid(row=3, column=1, padx=5, pady=5)
+
 #image frame
 image_frame = tk.Frame(root)
 image_frame.pack(pady=20)
@@ -516,8 +587,12 @@ status.grid(row=2, column=0, pady=5)
 
 #map page
 map_page = tk.Frame(root)
-map_page_title = tk.Label(map_page, text="Map", font=("Arial", 12, "normal"), pady=20)
-map_page_title.pack()
+
+#save map button 
+save_map_frame = tk.Frame(map_page)
+save_map_frame.pack(pady=10)
+save_map_button = tk.Button(save_map_frame, text="Save map", activebackground="grey", width="10", height="1", bd="2", command=save_map_button_pressed)
+save_map_button.pack()
 
 #canvas dimensions for map
 map_width = 450
