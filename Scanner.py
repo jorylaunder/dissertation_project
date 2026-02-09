@@ -7,6 +7,7 @@ import time
 import math #for distance calc
 import json #for saving a map
 from tkinter import filedialog 
+from scipy.optimize import least_squares # for least squares function
 
 #width and height variables of room
 room_width = None
@@ -18,6 +19,7 @@ max_point = 16
 samples_per_point = 50
 collecting = False
 
+#rssi to distance models
 models = None
 
 #calibration points dictionary
@@ -196,7 +198,10 @@ def processBLEpacket(device, advertisement_data):
 
         if models is not None:
             distances = rssi_to_distance_calculation(models)
+            if len(distances) == 4:
+                position = trilateration(distances)
             print("Distance from each beacon:", distances)
+            print("Estimated position", position)
 
             #WILL CALL TRILATERATION HERE
 #----------------------------------------------------------------------------END OF FINGER PRINTING----------------------------------------------------------------------------#
@@ -265,7 +270,9 @@ def load_map_button_pressed():
 
     if filename:
         load_map(filename)
+        show_calibration_page()
         show_map_page()
+        draw_map()
 
 #----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
@@ -292,9 +299,6 @@ def cal_start_button_pressed():
 #calculating the point to beacon distances
 def calculate_distances(room_width, room_height):
 
-    actual_cell_width = room_width / 4
-    actual_cell_height = room_height / 4
-
     #beacon positions, a top left, b top right, c bottom left, d bottom right
     beacon_coordinates = {
             "Alpha": (0.0, 0.0),
@@ -302,6 +306,9 @@ def calculate_distances(room_width, room_height):
             "Charlie": (0.0, room_height),
             "Delta": (room_width, room_height)
         }
+
+    actual_cell_width = room_width / 4
+    actual_cell_height = room_height / 4
 
     for point in range (1,17):
         #get coordinates of each point 
@@ -452,8 +459,8 @@ def load_map(filename):
     with open(filename, "r") as f:
         data = json.load(f)
 
-    room_width = data["room_width"]
-    room_height = data["room_height"]
+    room_width = float(data["room_width"])
+    room_height = float(data["room_height"])
 
     #rebuild the dictionary from json string
     calibration_data = {
@@ -510,9 +517,75 @@ def rssi_to_distance_calculation(models):
 
     return distances
 
-    #actual trilateration function
-    def trilateration():
-        return
+#actual trilateration function
+def trilateration(distances):
+    #once we have the estimated distance from each beacon, this becomes the radius of a circle we draw around each beacon
+    dA = distances["Alpha"]
+    dB = distances["Beta"]
+    dC = distances["Charlie"]
+    dD = distances["Delta"]
+    #the point at which these intersect is our estimated area
+    #where dA is radius of A circle etc
+
+    # Alpha: (x)^2 + (y)^2 = dA^2
+
+    # Beta: (x - width)^2 + (y)^2 = dB^2
+
+    # Charlie: (x)^2 + (y - height)^2 = dC^2
+
+    # Delta: (x - width)^2 + (y - height)^2 = dD^2
+
+    # we want to get x and y
+    # so expand every equation
+
+    # Alpha: x^2 + y^2 = dA^2
+
+    # Beta: x^2 - 2x(width) + width^2 + y^2 = dB^2
+
+    # Charlie: x^2 + y^2 - 2y(height) + height^2 = dC^2
+
+    # Delta: x^2 - 2x(width) + width^2 +y^2 - 2y(height) + height^2 = dD^2
+
+    # now solve for x and y by combining equations to get rid of x^2 and y^2
+    # and then reaarange for x or y respectively, we would get x1, y1 and x2, y2 
+
+    # equation 1 (Beta - Alpha): -2x(width) + width^2 = dB^2 - dA^2
+    # equation 1: 
+    x1 = (dA**2 - dB**2 + room_width**2) / (2*room_width)
+
+    # equation 2 (Charlie - Alpha): -2y(hieght) + height^2 = dC^2 - dA^2
+    # equation 2: 
+    y1 = (dA**2 - dC**2 + room_height**2) / (2*room_height)
+
+    # equation 3 (Delta - Alpha): -2x(width) -2y(height) + width^2 + height^2 - dD^2 - dA^2
+    # equation 3: 
+    x2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*y1*room_height)) / (2*room_width)
+    y2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*x1*room_height)) / (2*room_width)
+
+    #now that we have x1, x2 and y1, y2 we average these to find an x and y
+    x = (x1 + x2) / 2
+    y = (y1 + y2) / 2
+
+    # this becomes our initial guess for least squares function
+    position = [x,y]
+
+    #calculates difference between the guessed position and measured distance from each beacon
+    def distance_errors(position):
+        return [
+            math.sqrt((position[0] - 0)**2 + (position[1] - 0)**2) - dA,        
+            math.sqrt((position[0] - room_width)**2 + (position[1] - 0)**2) - dB,        
+            math.sqrt((position[0] - 0)**2 + (position[1] - room_height)**2) - dC,        
+            math.sqrt((position[0] - room_width)**2 + (position[1] - room_height)**2) - dD         
+        ]
+
+    #run least squares function, set minx miny and max x max y
+    result = least_squares(distance_errors, position, bounds=([0.0, 0.0], [room_width, room_height]))
+
+    #assign x and y estimates from returned object
+    x_estimate = float(result.x[0])
+    y_estimate = float(result.x[1])
+
+    return x_estimate, y_estimate
 
 
 
