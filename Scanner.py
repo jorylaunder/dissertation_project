@@ -22,6 +22,12 @@ collecting = False
 #rssi to distance models
 models = None
 
+#top left x and y of map and dimensions of map
+x0 = None
+y0 = None
+draw_width = None
+draw_height = None
+
 #calibration points dictionary
 calibration_data = {
     1: {"Alpha": [], "Beta": [], "Charlie": [], "Delta": []},
@@ -200,10 +206,10 @@ def processBLEpacket(device, advertisement_data):
             distances = rssi_to_distance_calculation(models)
             if len(distances) == 4:
                 position = trilateration(distances)
+                print("Estimated position", position)
             print("Distance from each beacon:", distances)
-            print("Estimated position", position)
+            
 
-            #WILL CALL TRILATERATION HERE
 #----------------------------------------------------------------------------END OF FINGER PRINTING----------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------MAIN----------------------------------------------------------------------------------------------#
@@ -391,6 +397,8 @@ def rssi_to_distance_model():
 
 def draw_map():
 
+    global x0, y0, draw_height, draw_width
+
     #prevent drawing over any existing maps
     map.delete("all")
 
@@ -475,6 +483,57 @@ def load_map(filename):
     print(f"Map loaded from {filename}")
 
     return models
+
+#draws dot in cell based of off position from trilateration function
+def draw_dot_on_map(x_estimate, y_estimate):
+
+    global room_width, room_height, dot_column, dot_row
+
+    cell_width = room_width / 4
+    cell_height = room_height / 4
+
+    #get column its in
+    if x_estimate >= 0 and x_estimate < cell_width:
+        dot_column = 0
+    elif x_estimate >= cell_width and x_estimate < (2*cell_width):
+        dot_column = 1
+    elif x_estimate >= (2*cell_width) and x_estimate < (3*cell_width):
+        dot_column = 2
+    elif x_estimate >= (3*cell_width) and x_estimate < (4*cell_width):
+        dot_column = 3
+
+    #get row its in
+    if y_estimate >= 0 and y_estimate < cell_height:
+        dot_row = 0
+    elif y_estimate >= cell_height and y_estimate < (2*cell_height):
+        dot_row = 1
+    elif y_estimate >= (2*cell_height) and y_estimate < (3*cell_height):
+        dot_row = 2
+    elif y_estimate >= (3*cell_height) and y_estimate < (4*cell_height):
+        dot_row = 3
+
+    if dot_column != None and dot_row != None:
+
+        cell_draw_width = draw_width / 4
+        cell_draw_height = draw_height / 4
+
+        #get centre of cell dot should be in
+        centre_x = x0 + (dot_column + 0.5) * cell_draw_width
+        centre_y = y0 + (dot_row + 0.5) * cell_draw_height
+
+        radius = 5
+
+        map.delete("position_dot")
+
+        map.create_oval(
+            centre_x - radius,
+            centre_y - radius, 
+            centre_x + radius,
+            centre_y + radius,
+            fill = "red",
+            outline = "",
+            tags = "position_dot"
+        )
 
     
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
@@ -566,6 +625,10 @@ def trilateration(distances):
     x = (x1 + x2) / 2
     y = (y1 + y2) / 2
 
+    #clamp x and y in room
+    x = max(0.0, min(x, room_width))
+    y = max(0.0, min(y, room_height))
+
     # this becomes our initial guess for least squares function
     position = [x,y]
 
@@ -585,9 +648,7 @@ def trilateration(distances):
     x_estimate = float(result.x[0])
     y_estimate = float(result.x[1])
 
-    return x_estimate, y_estimate
-
-
+    draw_dot_on_map(x_estimate, y_estimate)
 
 #----------------------------------------------------------------------------END OF TRILATERATION------------------------------------------------------------------------------#
 
