@@ -88,6 +88,26 @@ point_to_beacon_distances = {
     16: {"Alpha": 0, "Beta": 0, "Charlie": 0, "Delta": 0},
 }
 
+#dictionary for neighbouring cells to each cell
+neighbouring_cells = {
+    1: [2, 7, 8],
+    2: [1, 3, 6, 7, 8],
+    3: [2, 4, 5, 6, 7],
+    4: [3, 5, 6],
+    5: [3, 4, 6, 11, 12],
+    6: [2, 3, 4, 5, 7, 10, 11, 12],
+    7: [1, 2, 3, 6, 8, 9, 10, 11],
+    8: [1, 2, 7, 9, 10],
+    9: [7, 8, 10, 15, 16],
+    10: [6, 7, 8, 9, 11, 14, 15, 16],
+    11: [5, 6, 7, 10, 12, 13, 14, 15],
+    12: [5, 6, 11, 13, 14],
+    13: [11, 12, 14],
+    14: [10, 11, 12, 13, 15],
+    15: [9, 10, 11, 14, 16],
+    16: [9, 10, 15]
+}
+
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   "48:87:2D:9D:55:9E": "Beta",
@@ -97,8 +117,19 @@ wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   
                   }
 
+#live raw rsssi for fingerprint matching
+live_rssi = {
+    "Alpha": [],
+    "Beta": [],
+    "Charlie": [],
+    "Delta": []
+}
+
+#for sliding live raw rssi window to compare to fingerprints
+fingerprint_window = 20
+
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
-smooth_factor = 0.1
+smooth_factor = 0.2
 #each beacon's average rssi value
 alpha_rssi_avg = None
 beta_rssi_avg = None
@@ -119,12 +150,25 @@ def processBLEpacket(device, advertisement_data):
 
     global models
 
+    global live_rssi
+
+    cell = None
+    distances = {}
+    trilateration_x = trilateration_y = None
+    fingerprint_x = fingerprint_y = None
+
     #prints name and RSSI of my BLE beacons only
     if device.address in wanted_devices:
 
         #get given name and rssi value
         name = wanted_devices[device.address]
         rssi = advertisement_data.rssi
+
+        #store sliding window of live raw rssi values for fingerprint matching, if more than 20 get rid of first rssi in
+        if name in live_rssi:
+            live_rssi[name].append(rssi)
+            if len(live_rssi[name]) > fingerprint_window:
+                live_rssi[name].pop(0)
 
         #exponential moving averages (EMA)
         if name == 'Alpha':
@@ -202,13 +246,76 @@ def processBLEpacket(device, advertisement_data):
                 else:
                     status.config(text=f"move to point {current_point} and press start")
 
-        if models is not None:
+        if models is not None and not collecting:
+            #fingerprint matching
+            cell = fingerprint_matching()
+            if cell is not None:
+                print("fingerprint guess: ", cell)
+                #convert cell to x,y
+                row = point_coordinates[cell][0]
+                column = point_coordinates[cell][1]
+                cell_width = room_width / 4
+                cell_height = room_height / 4
+                fingerprint_x = (column + 0.5) * cell_width
+                fingerprint_y = (row + 0.5) * cell_height
+
+            #trilateration
             distances = rssi_to_distance_calculation(models)
             if len(distances) == 4:
-                position = trilateration(distances)
-                print("Estimated position", position)
-            print("Distance from each beacon:", distances)
-            
+                trilateration_x, trilateration_y = trilateration(distances)
+            #print("Distance from each beacon:", distances)
+
+        #fusion of fingerprint matching and trilateration
+        if cell is not None and len(distances) == 4:
+            #turn trilateration x and y into a cell
+            #if trilateration cell == fingerprint cell:
+                #draw dot on map at this cell, i.e. just pass trilateration x and y into draw dot on map
+            #else:
+                #get neighbouring cells of trilateration cell from dictionary
+                #these cells and the trilateration cells become the candidate cells, min and max
+                #if the fingerprint cell is one of these candidate cells then:
+                    #convert fingerprint cell into x y
+                    #get average x y from fingerporint x y and trilateration x, y (use weights)
+                    #pass this into draw dot on map
+                #else(fingerprint cell is not in trilateration cell and neighbour cells):
+                    #not sure what to do here yet
+            return
+
+#match live rssi to recorded rssi for each cell
+def fingerprint_matching():
+    #for every cell in the room, compare live rssi average to fingerprint average, measure the error, average the error, keep cell with smallest error
+    most_likely_cell = None
+    smallest_error = float("inf")
+
+    for cell in range(1, 17):
+        error_sum = 0
+        beacons_used = 0
+
+        for beacon in ["Alpha", "Beta", "Charlie", "Delta"]:
+            live_values = live_rssi[beacon]
+            fingerprint_values = calibration_data[cell][beacon]
+
+            #if empty continue
+            if not live_values or not fingerprint_values:
+                continue
+
+            #get live average and calibration data average of each beacon
+            live_average = sum(live_values) / len(live_values)
+            fingerprint_average = sum(fingerprint_values) / len(fingerprint_values)
+
+            error = live_average - fingerprint_average
+            #square errors to make big differences bigger
+            error_sum += error * error
+            beacons_used += 1
+
+        if beacons_used >= 3:
+            average_error = error_sum / beacons_used
+
+            if average_error < smallest_error:
+                smallest_error = average_error
+                most_likely_cell = cell
+
+    return most_likely_cell
 
 #----------------------------------------------------------------------------END OF FINGER PRINTING----------------------------------------------------------------------------#
 
@@ -648,7 +755,8 @@ def trilateration(distances):
     x_estimate = float(result.x[0])
     y_estimate = float(result.x[1])
 
-    draw_dot_on_map(x_estimate, y_estimate)
+    #draw_dot_on_map(x_estimate, y_estimate)
+    return x_estimate, y_estimate
 
 #----------------------------------------------------------------------------END OF TRILATERATION------------------------------------------------------------------------------#
 
