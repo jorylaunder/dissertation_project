@@ -152,10 +152,14 @@ def processBLEpacket(device, advertisement_data):
 
     global live_rssi
 
-    cell = None
+    fingerprint_cell = None
     distances = {}
     trilateration_x = trilateration_y = None
     fingerprint_x = fingerprint_y = None
+    tri_row = None
+    tri_column = None
+    trilateration_cell = None
+
 
     #prints name and RSSI of my BLE beacons only
     if device.address in wanted_devices:
@@ -248,38 +252,87 @@ def processBLEpacket(device, advertisement_data):
 
         if models is not None and not collecting:
             #fingerprint matching
-            cell = fingerprint_matching()
-            if cell is not None:
-                print("fingerprint guess: ", cell)
-                #convert cell to x,y
-                row = point_coordinates[cell][0]
-                column = point_coordinates[cell][1]
-                cell_width = room_width / 4
-                cell_height = room_height / 4
-                fingerprint_x = (column + 0.5) * cell_width
-                fingerprint_y = (row + 0.5) * cell_height
+            fingerprint_cell = fingerprint_matching()
+            if fingerprint_cell is not None:
+                print("fingerprint guess: ", fingerprint_cell)
+                
 
             #trilateration
             distances = rssi_to_distance_calculation(models)
             if len(distances) == 4:
                 trilateration_x, trilateration_y = trilateration(distances)
-            #print("Distance from each beacon:", distances)
+                cell_width = room_width / 4
+                cell_height = room_height / 4
 
-        #fusion of fingerprint matching and trilateration
-        if cell is not None and len(distances) == 4:
-            #turn trilateration x and y into a cell
-            #if trilateration cell == fingerprint cell:
-                #draw dot on map at this cell, i.e. just pass trilateration x and y into draw dot on map
-            #else:
-                #get neighbouring cells of trilateration cell from dictionary
-                #these cells and the trilateration cells become the candidate cells, min and max
-                #if the fingerprint cell is one of these candidate cells then:
-                    #convert fingerprint cell into x y
-                    #get average x y from fingerporint x y and trilateration x, y (use weights)
-                    #pass this into draw dot on map
-                #else(fingerprint cell is not in trilateration cell and neighbour cells):
-                    #not sure what to do here yet
-            return
+                # get trilateration cell
+                #column
+                if 0 <= trilateration_x < cell_width:
+                    tri_column = 0
+                elif cell_width <= trilateration_x < 2 * cell_width:
+                    tri_column = 1
+                elif 2 * cell_width <= trilateration_x < 3 * cell_width:
+                    tri_column = 2
+                elif 3 * cell_width <= trilateration_x < 4 * cell_width:
+                    tri_column = 3
+                else:
+                    tri_column = None
+
+                # row
+                if 0 <= trilateration_y < cell_height:
+                    tri_row = 0
+                elif cell_height <= trilateration_y < 2 * cell_height:
+                    tri_row = 1
+                elif 2 * cell_height <= trilateration_y < 3 * cell_height:
+                    tri_row = 2
+                elif 3 * cell_height <= trilateration_y < 4 * cell_height:
+                    tri_row = 3
+                else:
+                    tri_row = None
+
+            trilateration_cell = None
+            if tri_row is not None and tri_column is not None:
+                for cell, (row, col) in point_coordinates.items():
+                    if row == tri_row and col == tri_column:
+                        trilateration_cell = cell
+                        break
+
+            #fusion of fingerprint matching and trilateration
+            if fingerprint_cell is not None and trilateration_cell is not None and len(distances) == 4:
+                if trilateration_cell == fingerprint_cell:
+                    #draw dot on map at this cell
+                    draw_dot_on_map(trilateration_x, trilateration_y)
+                else:
+                    #get neighbouring cells of trilateration cell from dictionary
+                    #these cells and the trilateration cells become the candidate cells, min and max
+                    candidate_cells = neighbouring_cells[trilateration_cell] + [trilateration_cell]
+                    if fingerprint_cell in candidate_cells:
+                        #convert fingerprint cell into x y
+                        row = point_coordinates[fingerprint_cell][0]
+                        column = point_coordinates[fingerprint_cell][1]
+                        cell_width = room_width / 4
+                        cell_height = room_height / 4
+                        fingerprint_x = (column + 0.5) * cell_width
+                        fingerprint_y = (row + 0.5) * cell_height
+                        #get average x y from fingerporint x y and trilateration x, y (use weights)
+                        trilateration_weight = 0.3
+                        fingerprint_weight = 0.7
+                        x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
+                        y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
+
+                        draw_dot_on_map(x, y)
+
+                    #else just keep last dot position
+                    else:
+                        pass
+                    #OPTION IF I NEED TO IMPROVE THIS PART
+                    #else(fingerprint cell is not in trilateration cell and neighbour cells):
+                        #keep last dot but start a rolling counter for both trilateration and fingerprint for where they think they both are
+                        # so for fingerprint if its had 20 new readings in the window and still says the same cell then use fingerprint cell
+                        # if trilateration has been the same cell x amount of times and rssi avg have changed then use trilateration cell 
+                        #else keep last dot
+                        #make sure to reset the counters once either of them been used or just one?
+
+                return
 
 #match live rssi to recorded rssi for each cell
 def fingerprint_matching():
