@@ -8,6 +8,7 @@ import math #for distance calc
 import json #for saving a map
 from tkinter import filedialog 
 from scipy.optimize import least_squares # for least squares function
+import statistics
 
 #width and height variables of room
 room_width = None
@@ -295,6 +296,11 @@ def processBLEpacket(device, advertisement_data):
                     if row == tri_row and col == tri_column:
                         trilateration_cell = cell
                         break
+            
+            #for testing
+            if trilateration_cell is not None:
+                print("trilateration guess:", trilateration_cell)
+
 
             #fusion of fingerprint matching and trilateration
             if fingerprint_cell is not None and trilateration_cell is not None and len(distances) == 4:
@@ -314,33 +320,48 @@ def processBLEpacket(device, advertisement_data):
                         fingerprint_x = (column + 0.5) * cell_width
                         fingerprint_y = (row + 0.5) * cell_height
                         #get average x y from fingerporint x y and trilateration x, y (use weights)
-                        trilateration_weight = 0.3
-                        fingerprint_weight = 0.7
+                        trilateration_weight = 0.45
+                        fingerprint_weight = 0.55
                         x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
                         y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
                         draw_dot_on_map(x, y)
 
-                    #else just keep last dot position
+                    #else run fingerprint on only candidate cells
                     else:
-                        pass
-                    #OPTION IF I NEED TO IMPROVE THIS PART
-                    #else(fingerprint cell is not in trilateration cell and neighbour cells):
-                        #keep last dot but start a rolling counter for both trilateration and fingerprint for where they think they both are
-                        # so for fingerprint if its had 20 new readings in the window and still says the same cell then use fingerprint cell
-                        # if trilateration has been the same cell x amount of times and rssi avg have changed then use trilateration cell 
-                        #else keep last dot
-                        #make sure to reset the counters once either of them been used or just one?
+                        new_fingerprint_cell = fingerprint_matching(candidate_cells)
+                        if new_fingerprint_cell == trilateration_cell:
+                            draw_dot_on_map(trilateration_x, trilateration_y)
+                        else:
+                            #convert fingerprint cell into x y
+                            row = point_coordinates[new_fingerprint_cell][0]
+                            column = point_coordinates[new_fingerprint_cell][1]
+                            cell_width = room_width / 4
+                            cell_height = room_height / 4
+                            fingerprint_x = (column + 0.5) * cell_width
+                            fingerprint_y = (row + 0.5) * cell_height
+                            #get average x y from fingerporint x y and trilateration x, y (use weights)
+                            trilateration_weight = 0.45
+                            fingerprint_weight = 0.55
+                            x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
+                            y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
+                            draw_dot_on_map(x, y)
+                    
                 return
 
 #match live rssi to recorded rssi for each cell
-def fingerprint_matching():
+def fingerprint_matching(candidate_cells=None):
     #for every cell in the room, compare live rssi average to fingerprint average, measure the error, average the error, keep cell with smallest error
     most_likely_cell = None
     smallest_error = float("inf")
 
-    for cell in range(1, 17):
+    if candidate_cells is None:
+        cells_to_check = range(1,17)
+    else:
+        cells_to_check = candidate_cells
+
+    for cell in cells_to_check:
         error_sum = 0
         beacons_used = 0
 
@@ -351,12 +372,19 @@ def fingerprint_matching():
             #if empty continue
             if not live_values or not fingerprint_values:
                 continue
-
+            
+            #using mean
             #get live average and calibration data average of each beacon
-            live_average = sum(live_values) / len(live_values)
-            fingerprint_average = sum(fingerprint_values) / len(fingerprint_values)
+            #live_average = sum(live_values) / len(live_values)
+            #fingerprint_average = sum(fingerprint_values) / len(fingerprint_values)
 
-            error = live_average - fingerprint_average
+            #using median
+            live_sorted = sorted(live_values)
+            fingerprint_sorted = sorted(fingerprint_values)
+            live_average = live_sorted[len(live_sorted) // 2]
+            fingerprint_average = fingerprint_sorted[len(fingerprint_sorted) // 2]
+
+            error = (live_average - fingerprint_average)
             #square errors to make big differences bigger
             error_sum += error * error
             beacons_used += 1
