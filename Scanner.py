@@ -8,7 +8,7 @@ import math #for distance calc
 import json #for saving a map
 from tkinter import filedialog 
 from scipy.optimize import least_squares # for least squares function
-import statistics
+from scipy.stats import wasserstein_distance
 
 #width and height variables of room
 room_width = None
@@ -119,6 +119,14 @@ wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   }
 
 #live raw rsssi for fingerprint matching
+fingerprint_rssi = {
+    "Alpha": [],
+    "Beta": [],
+    "Charlie": [],
+    "Delta": []
+}
+
+#for trilateration
 live_rssi = {
     "Alpha": [],
     "Beta": [],
@@ -126,8 +134,20 @@ live_rssi = {
     "Delta": []
 }
 
+distance_ema = {
+    "Alpha": None,
+    "Beta": None,
+    "Charlie": None,
+    "Delta": None
+}
+
+distance_smooth_factor = 0.3
+
+#for sliding window live raw rssi windown for trilateration
+trilateration_window = 11
+
 #for sliding live raw rssi window to compare to fingerprints
-fingerprint_window = 20
+fingerprint_window = 30
 
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
 smooth_factor = 0.2
@@ -169,11 +189,17 @@ def processBLEpacket(device, advertisement_data):
         name = wanted_devices[device.address]
         rssi = advertisement_data.rssi
 
-        #store sliding window of live raw rssi values for fingerprint matching, if more than 20 get rid of first rssi in
+        #store sliding window of live raw rssi values for trilateration
         if name in live_rssi:
             live_rssi[name].append(rssi)
-            if len(live_rssi[name]) > fingerprint_window:
+            if len(live_rssi[name]) > trilateration_window:
                 live_rssi[name].pop(0)
+
+        #same but for fingerprinting
+        if name in fingerprint_rssi:
+            fingerprint_rssi[name].append(rssi)
+            if len(fingerprint_rssi[name]) > fingerprint_window:
+                fingerprint_rssi[name].pop(0)
 
         #exponential moving averages (EMA)
         if name == 'Alpha':
@@ -292,6 +318,7 @@ def processBLEpacket(device, advertisement_data):
 
             trilateration_cell = None
             if tri_row is not None and tri_column is not None:
+                draw_dot_on_map(trilateration_x, trilateration_y)
                 for cell, (row, col) in point_coordinates.items():
                     if row == tri_row and col == tri_column:
                         trilateration_cell = cell
@@ -320,8 +347,8 @@ def processBLEpacket(device, advertisement_data):
                         fingerprint_x = (column + 0.5) * cell_width
                         fingerprint_y = (row + 0.5) * cell_height
                         #get average x y from fingerporint x y and trilateration x, y (use weights)
-                        trilateration_weight = 0.45
-                        fingerprint_weight = 0.55
+                        trilateration_weight = 0.65
+                        fingerprint_weight = 0.35
                         x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
                         y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
@@ -330,6 +357,7 @@ def processBLEpacket(device, advertisement_data):
                     #else run fingerprint on only candidate cells
                     else:
                         new_fingerprint_cell = fingerprint_matching(candidate_cells)
+                        print("new fingerprint guess: ", new_fingerprint_cell)
                         if new_fingerprint_cell == trilateration_cell:
                             draw_dot_on_map(trilateration_x, trilateration_y)
                         else:
@@ -341,8 +369,8 @@ def processBLEpacket(device, advertisement_data):
                             fingerprint_x = (column + 0.5) * cell_width
                             fingerprint_y = (row + 0.5) * cell_height
                             #get average x y from fingerporint x y and trilateration x, y (use weights)
-                            trilateration_weight = 0.45
-                            fingerprint_weight = 0.55
+                            trilateration_weight = 0.65
+                            fingerprint_weight = 0.35
                             x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
                             y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
@@ -379,12 +407,15 @@ def fingerprint_matching(candidate_cells=None):
             #fingerprint_average = sum(fingerprint_values) / len(fingerprint_values)
 
             #using median
-            live_sorted = sorted(live_values)
-            fingerprint_sorted = sorted(fingerprint_values)
-            live_average = live_sorted[len(live_sorted) // 2]
-            fingerprint_average = fingerprint_sorted[len(fingerprint_sorted) // 2]
+            #live_sorted = sorted(live_values)
+            #fingerprint_sorted = sorted(fingerprint_values)
+            #live_average = live_sorted[len(live_sorted) // 2]
+            #fingerprint_average = fingerprint_sorted[len(fingerprint_sorted) // 2]
+            #error = (live_average - fingerprint_average)
 
-            error = (live_average - fingerprint_average)
+            #using full distribution
+            error = wasserstein_distance(live_values, fingerprint_values)
+
             #square errors to make big differences bigger
             error_sum += error * error
             beacons_used += 1
@@ -731,36 +762,44 @@ def draw_dot_on_map(x_estimate, y_estimate):
 #use models and rearrange equation to get distance
 def rssi_to_distance_calculation(models):
 
+    global distance_ema
+
     distances = {}
 
     #set max distance using actual max distance and tolerance
     tolerance = 1.2
     max_distance = math.sqrt(room_height**2 + room_width**2) * tolerance
 
-    ema_rssi_values = {
-        "Alpha": alpha_rssi_avg,
-        "Beta": beta_rssi_avg,
-        "Charlie": charlie_rssi_avg,
-        "Delta": delta_rssi_avg
-    }
+    for beacon in ["Alpha", "Beta", "Charlie", "Delta"]:
+        rssi_samples = live_rssi[beacon]
 
-    for beacon in ema_rssi_values:
-        rssi = ema_rssi_values[beacon]
-
-        if rssi == None:
+        if not rssi_samples or beacon not in models:
             continue
 
         # get model parameters
         distance_spread = models[beacon][0]
         distance_to_rssi_relationship = models[beacon][1]
 
-        # find distance, rearranging the log distance path loss model
-        distance = 10 ** ((rssi - distance_spread) / distance_to_rssi_relationship)
+        # convert each rssi to distance
+        distance_samples = []
+        for rssi in rssi_samples:
+            distance = 10 ** ((rssi - distance_spread) / distance_to_rssi_relationship)
+            distance_samples.append(distance)
 
-        if distance > max_distance:
-            distance = max_distance
+        #get median distance
+        distance_samples.sort()
+        median_distance = distance_samples[len(distance_samples)//2]
+
+        if median_distance > max_distance:
+            median_distance = max_distance
+
+        #put EMA smoothing on distance
+        if distance_ema[beacon] is None:
+            distance_ema[beacon] = median_distance
+        else: 
+            distance_ema[beacon] = (distance_smooth_factor * median_distance + (1 - distance_smooth_factor) * distance_ema[beacon])
         
-        distances[beacon] = distance
+        distances[beacon] = distance_ema[beacon]
 
     return distances
 
@@ -771,6 +810,10 @@ def trilateration(distances):
     dB = distances["Beta"]
     dC = distances["Charlie"]
     dD = distances["Delta"]
+    print("dA:", dA)
+    print("dB:", dB)
+    print("dC:", dC)
+    print("dD:", dD)
     #the point at which these intersect is our estimated area
     #where dA is radius of A circle etc
 
@@ -807,7 +850,7 @@ def trilateration(distances):
     # equation 3 (Delta - Alpha): -2x(width) -2y(height) + width^2 + height^2 - dD^2 - dA^2
     # equation 3: 
     x2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*y1*room_height)) / (2*room_width)
-    y2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*x1*room_height)) / (2*room_width)
+    y2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*x1*room_height)) / (2*room_height)
 
     #now that we have x1, x2 and y1, y2 we average these to find an x and y
     x = (x1 + x2) / 2
@@ -822,19 +865,34 @@ def trilateration(distances):
 
     #calculates difference between the guessed position and measured distance from each beacon
     def distance_errors(position):
+
+        #weights added in as further beacons become more noisy, so add more weight to closer beacons, using variance
+
+        weight_power = 0.25
+
+        wA = 1 / (dA**weight_power + 0.1)
+        wB = 1 / (dB**weight_power + 0.1)
+        wC = 1 / (dC**weight_power + 0.1)
+        wD = 1 / (dD**weight_power + 0.1)
+
         return [
-            math.sqrt((position[0] - 0)**2 + (position[1] - 0)**2) - dA,        
-            math.sqrt((position[0] - room_width)**2 + (position[1] - 0)**2) - dB,        
-            math.sqrt((position[0] - 0)**2 + (position[1] - room_height)**2) - dC,        
-            math.sqrt((position[0] - room_width)**2 + (position[1] - room_height)**2) - dD         
+            (math.sqrt((position[0] - 0)**2 + (position[1] - 0)**2) - dA) * wA,        
+            (math.sqrt((position[0] - room_width)**2 + (position[1] - 0)**2) - dB) * wB,        
+            (math.sqrt((position[0] - 0)**2 + (position[1] - room_height)**2) - dC) * wC,        
+            (math.sqrt((position[0] - room_width)**2 + (position[1] - room_height)**2) - dD) * wD        
         ]
 
     #run least squares function, set minx miny and max x max y
     result = least_squares(distance_errors, position, bounds=([0.0, 0.0], [room_width, room_height]))
 
+    print("cost: ", result.cost)
+
     #assign x and y estimates from returned object
     x_estimate = float(result.x[0])
     y_estimate = float(result.x[1])
+
+    print("X:", x_estimate)
+    print("Y:", y_estimate)
 
     #draw_dot_on_map(x_estimate, y_estimate)
     return x_estimate, y_estimate
