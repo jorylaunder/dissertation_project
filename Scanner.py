@@ -14,6 +14,13 @@ from scipy.stats import wasserstein_distance
 room_width = None
 room_height = None
 
+#for shortest path
+current_cell = None
+selected_cell = None
+#to avoid spikes saying you've arrived
+arrived_threshold = 3
+arrived_counter = 0
+
 #calibration variables
 current_point = 1
 max_point = 16
@@ -109,6 +116,26 @@ neighbouring_cells = {
     16: [9, 10, 15]
 }
 
+#no diagonals for path drawing
+neighbouring_cells_for_path = {
+    1: [2, 8],
+    2: [1, 3, 7],
+    3: [2, 4, 6],
+    4: [3, 5],
+    5: [4, 6, 12],
+    6: [3, 5, 7, 11],
+    7: [2, 6, 8, 10],
+    8: [1, 7, 9],
+    9: [8, 10, 16],
+    10: [7, 9, 11, 15],
+    11: [6, 10, 12, 14],
+    12: [5, 11, 13],
+    13: [12, 14],
+    14: [11, 13, 15],
+    15: [10, 14, 16],
+    16: [9, 15]
+}
+
 #MAC addresses of my BLE beacons and given name
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   "48:87:2D:9D:55:9E": "Beta",
@@ -172,6 +199,8 @@ def processBLEpacket(device, advertisement_data):
     global models
 
     global live_rssi
+
+    global current_cell
 
     fingerprint_cell = None
     distances = {}
@@ -327,8 +356,7 @@ def processBLEpacket(device, advertisement_data):
             #for testing
             if trilateration_cell is not None:
                 print("trilateration guess:", trilateration_cell)
-
-
+                
             #fusion of fingerprint matching and trilateration
             if fingerprint_cell is not None and trilateration_cell is not None and len(distances) == 4:
                 if trilateration_cell == fingerprint_cell:
@@ -663,6 +691,9 @@ def draw_map():
     map.create_text(x0 + label_offset, y1 - label_offset, text="C", anchor="sw", font=("Arial", 12, "bold"), fill="blue")
     map.create_text(x1 - label_offset, y1 - label_offset, text="D", anchor="se", font=("Arial", 12, "bold"), fill="blue")
 
+    #add in cell selection
+    map.bind("<Button-1>", on_map_click)
+
     #function to save map
 def save_map(filename):
     data = {"room_width": room_width,
@@ -706,7 +737,7 @@ def load_map(filename):
 #draws dot in cell based of off position from trilateration function
 def draw_dot_on_map(x_estimate, y_estimate):
 
-    global room_width, room_height, dot_column, dot_row
+    global room_width, room_height, dot_column, dot_row, current_cell, selected_cell, arrived_threshold, arrived_counter
 
     cell_width = room_width / 4
     cell_height = room_height / 4
@@ -754,7 +785,129 @@ def draw_dot_on_map(x_estimate, y_estimate):
             tags = "position_dot"
         )
 
+        #update current cell
+        for cell, (row, col) in point_coordinates.items():
+            if row == dot_row and col == dot_column:
+                current_cell = cell
+                break
+        
+        #once arrived unselect cell and show message
+        #make sure we have been there for the trheshold to avoid spikes 
+        if current_cell == selected_cell and selected_cell is not None:
+            arrived_counter += 1
+            if arrived_counter >= arrived_threshold:
+                selected_cell = None
+                arrived_counter = 0
+                map.create_text(map_width / 2, 20, text="You have arrived!", 
+                                font=("Arial", 12, "bold"), fill="green", tags="arrived_text")
+                root.after(5000, lambda: map.delete("arrived_text"))
+        else:
+            #reset counter if we leave the cell before reaching threshold
+            arrived_counter = 0
+
+        draw_shortest_path()
+
+#when a cell is clicked
+def on_map_click(event):
+    global selected_cell
     
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #check map exists and click is inside it
+    if None in (x0, y0, draw_width, draw_height) or not (x0 <= event.x <= x0 + draw_width and y0 <= event.y <= y0 + draw_height):
+        return
+    
+    #figure out where the click was
+    col = int((event.x - x0) / cell_draw_width)
+    row = int((event.y - y0) / cell_draw_height)
+    col = max(0, min(col, 3))
+    row = max(0, min(row, 3))
+
+    #get cell number
+    clicked_cell = None
+    for cell, (r, c) in point_coordinates.items():
+        if r == row and c == col:
+            clicked_cell = cell
+            break
+
+    #deselect or select
+    if clicked_cell == selected_cell:
+        selected_cell = None
+    else:
+        selected_cell = clicked_cell
+
+    print("Cell clicked: ", clicked_cell)
+    draw_shortest_path()
+
+#breadth first search for shortest path
+def bfs_shortest_path(start, end):
+    #if cell we're in is the end cell return
+    if start == end:
+        return [start]
+        
+    #store cells weve visited
+    visited = {start}
+    #store potential paths
+    paths = [[start]]
+
+    while paths:
+        #get path from paths
+        path = paths.pop(0)
+        #get the last cell in the path
+        current = path[-1]
+
+        #if the neighbour is the end then we have our path
+        for neighbour in neighbouring_cells_for_path[current]:
+            if neighbour == end:
+                return path + [neighbour]
+            #if not add it to visited and path and carry on
+            if neighbour not in visited:
+                visited.add(neighbour)
+                paths.append(path + [neighbour])
+
+    #catch if not path found for some reason
+    return None
+    
+def draw_shortest_path():
+    
+
+    #remove previous path
+    map.delete("path")
+    
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #highlight destination cell
+    if selected_cell is not None:
+        row = point_coordinates[selected_cell][0]
+        column = point_coordinates[selected_cell][1]
+        #get boundaries of cell
+        centre_x = x0 + (column + 0.5) * cell_draw_width
+        centre_y = y0 + (row + 0.5) * cell_draw_height
+        radius = 5
+        map.create_oval(centre_x - radius, centre_y - radius, centre_x + radius, centre_y + radius,
+                        fill="green", outline="", tags="path")
+
+    #draw path
+    if current_cell is not None and selected_cell is not None and current_cell != selected_cell:
+        #get path
+        path = bfs_shortest_path(current_cell, selected_cell)
+
+        if path:
+            #highlight each cell in path
+            for cell in path:
+                #skip if current cell or destination
+                if cell == current_cell or cell == selected_cell:
+                    continue
+                row = point_coordinates[cell][0]
+                column = point_coordinates[cell][1]
+                #get boundaries of cell
+                centre_x = x0 + (column + 0.5) * cell_draw_width
+                centre_y = y0 + (row + 0.5) * cell_draw_height
+                radius = 4
+                map.create_oval(centre_x - radius, centre_y - radius, centre_x + radius, centre_y + radius,
+                                fill="lightgreen", outline="", tags="path")
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------TRILATERATION-------------------------------------------------------------------------------------#
