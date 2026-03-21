@@ -14,6 +14,13 @@ from scipy.stats import wasserstein_distance
 room_width = None
 room_height = None
 
+#keeping track if user is in edit mode
+edit_mode = False
+
+#sets for obstacle edges and obstacle cells
+obstacle_edges = set()
+obstacle_cells = set()
+
 #for shortest path
 current_cell = None
 selected_cell = None
@@ -527,6 +534,21 @@ def load_map_button_pressed():
         show_map_page()
         draw_map()
 
+#for toggling edit mode on and off
+def edit_map_button_pressed():
+    global edit_mode
+    #if clicked turn it to the opposite
+    edit_mode = not edit_mode
+    if edit_mode:
+        edit_map_button.config(text="Finish editing")
+        #change function called when map clicked
+        map.bind("<Button-1>", on_map_click_edit)
+        map.bind("<Double-Button-1>", on_map_double_click_edit)
+    else:
+        edit_map_button.config(text="Edit map")
+        map.bind("<Button-1>", on_map_click)
+        map.unbind("<Double-Button-1>")
+
 #----------------------------------------------------------------------------END OF CHANGING PAGES-----------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------CALIBRATION---------------------------------------------------------------------------------------#
@@ -684,6 +706,29 @@ def draw_map():
     map.create_line(x0, y0 + 2 * cell_height, x1, y0 + 2 * cell_height)
     map.create_line(x0, y0 + 3 * cell_height, x1, y0 + 3 * cell_height)
 
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #draw obstacles
+    for edge in obstacle_edges:
+        cells = list(edge)
+        r1, c1 = cells[0]
+        r2, c2 = cells[1]
+        #if same row then it is a vertical edge between two cells
+        if r1 == r2:
+            col = max(c1, c2)
+            edge_x = x0 + col * cell_draw_width
+            edge_y_start = y0 + r1 * cell_draw_height
+            edge_y_end = y0 + (r1 + 1) * cell_draw_height
+            map.create_line(edge_x, edge_y_start, edge_x, edge_y_end, width=4, fill="#404040")
+        #if same col then it is a horizontal edge between two cels
+        else:
+            row = max(r1, r2)
+            edge_y = y0 + row * cell_draw_height
+            edge_x_start = x0 + min(c1, c2) * cell_draw_width
+            edge_x_end = x0 + (min(c1, c2) + 1) * cell_draw_width
+            map.create_line(edge_x_start, edge_y, edge_x_end, edge_y, width=4, fill="#404040")
+
     #add beacons into corners
     label_offset = 10  #prevernt overlapping
     map.create_text(x0 + label_offset, y0 + label_offset, text="A", anchor="nw", font=("Arial", 12, "bold"), fill="blue")
@@ -691,8 +736,12 @@ def draw_map():
     map.create_text(x0 + label_offset, y1 - label_offset, text="C", anchor="sw", font=("Arial", 12, "bold"), fill="blue")
     map.create_text(x1 - label_offset, y1 - label_offset, text="D", anchor="se", font=("Arial", 12, "bold"), fill="blue")
 
-    #add in cell selection
-    map.bind("<Button-1>", on_map_click)
+    #change click depending on edit mode
+    if edit_mode:
+        map.bind("<Button-1>", on_map_click_edit)
+        map.bind("<Double-Button-1>", on_map_double_click_edit)
+    else:
+        map.bind("<Button-1>", on_map_click)
 
     #function to save map
 def save_map(filename):
@@ -856,9 +905,18 @@ def bfs_shortest_path(start, end):
         path = paths.pop(0)
         #get the last cell in the path
         current = path[-1]
+        current_row, current_col = point_coordinates[current]
 
-        #if the neighbour is the end then we have our path
+        
         for neighbour in neighbouring_cells_for_path[current]:
+            
+            
+            #skip if obstacle edge between current cell and this neighbour
+            neighbour_row, neighbour_col = point_coordinates[neighbour]
+            edge = frozenset({(current_row, current_col), (neighbour_row, neighbour_col)})
+            if edge in obstacle_edges:
+                continue
+            #if the neighbour is the end then we have our path
             if neighbour == end:
                 return path + [neighbour]
             #if not add it to visited and path and carry on
@@ -907,7 +965,77 @@ def draw_shortest_path():
                 centre_y = y0 + (row + 0.5) * cell_draw_height
                 radius = 4
                 map.create_oval(centre_x - radius, centre_y - radius, centre_x + radius, centre_y + radius,
+      
                                 fill="lightgreen", outline="", tags="path")
+                
+#when edit mode is on and map is clicked
+def on_map_click_edit(event):
+    global obstacle_edges
+
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #if click outside map
+    if not (x0 <= event.x <= x0 + draw_width and y0 <= event.y <= y0 + draw_height):
+        return
+
+    #distance at which clicks snap to an edge
+    snap_distance = 20
+
+    closest_edge = None
+    closest_distance = float("inf")
+
+    #looping through every cell
+    for row in range(4):
+        for col in range(4):
+            #check vertical edge to right of each cell, except last one
+            if col + 1 < 4:
+                #x coord
+                edge_x = x0 + (col + 1) * cell_draw_width
+                #y coords
+                edge_y_start = y0 + row * cell_draw_height
+                edge_y_end = y0 + (row + 1) * cell_draw_height
+                #check if click was in this vertical span
+                if edge_y_start <= event.y <= edge_y_end:
+                    #horizontal distance from click to edge
+                    distance = abs(event.x - edge_x)
+                    #if its the closest edge then keep it
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        #store in frozenset as the two cells (row, col) edge seperates
+                        closest_edge = frozenset({(row, col), (row, col + 1)})
+
+            #check horizontal edge below all cells except bottom
+            if row + 1 < 4:
+                #y coord
+                edge_y = y0 + (row + 1) * cell_draw_height
+                #x coords
+                edge_x_start = x0 + col * cell_draw_width
+                edge_x_end = x0 + (col + 1) * cell_draw_width
+                #check if click was in this vertical span
+                if edge_x_start <= event.x <= edge_x_end:
+                    #vertical distance from click to edge
+                    distance = abs(event.y - edge_y)
+                    #if its the closest edge then keep it
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        #store in frozenset as the two cells (row, col) edge seperates
+                        closest_edge = frozenset({(row, col), (row + 1, col)})
+
+    #edge found
+    if closest_edge is not None and closest_distance <= snap_distance:
+        #if obstacle then remove
+        if closest_edge in obstacle_edges:
+            obstacle_edges.remove(closest_edge) 
+        #otherwise add
+        else:
+            obstacle_edges.add(closest_edge)
+
+        #redraw map and path with changes
+        draw_map()
+        draw_shortest_path()
+
+
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------TRILATERATION-------------------------------------------------------------------------------------#
@@ -1126,7 +1254,10 @@ map_page = tk.Frame(root)
 save_map_frame = tk.Frame(map_page)
 save_map_frame.pack(pady=10)
 save_map_button = tk.Button(save_map_frame, text="Save map", activebackground="grey", width="10", height="1", bd="2", command=save_map_button_pressed)
-save_map_button.pack()
+save_map_button.grid(row=0, column=0, padx=10)
+#edit map button
+edit_map_button = tk.Button(save_map_frame, text="Edit map", activebackground="grey", width="10", height="1", bd="2", command=edit_map_button_pressed)
+edit_map_button.grid(row=0, column=1, padx=10)
 
 #canvas dimensions for map
 map_width = 450
