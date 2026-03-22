@@ -745,9 +745,14 @@ def draw_map():
 
     #function to save map
 def save_map(filename):
+
+    #turn into lists of lists
+    edges = [list([list(cell) for cell in edge]) for edge in obstacle_edges]
+
     data = {"room_width": room_width,
             "room_height": room_height,
-            "calibration_data": calibration_data
+            "calibration_data": calibration_data,
+            "obstacle_edges": edges
             }
         
     with open(filename, "w") as f:
@@ -757,7 +762,7 @@ def save_map(filename):
 
 #function to load a saved map
 def load_map(filename):
-    global room_width, room_height, calibration_data, models, current_point, collecting
+    global room_width, room_height, calibration_data, models, current_point, collecting, obstacle_edges
 
     #prevent calibration from runnning again
     current_point = max_point + 1
@@ -774,6 +779,12 @@ def load_map(filename):
         int(point): data["calibration_data"][point]
         for point in data["calibration_data"]
     }
+
+    #obstacle edges
+    obstacle_edges = set()
+    for edge in data.get("obstacle_edges", []):
+        #turn back into frozenset
+        obstacle_edges.add(frozenset([tuple(cell) for cell in edge]))
 
     #calculate all the calibration data again
     calculate_distances(room_width, room_height)
