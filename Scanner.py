@@ -181,7 +181,7 @@ distance_smooth_factor = 0.3
 trilateration_window = 11
 
 #for sliding live raw rssi window to compare to fingerprints
-fingerprint_window = 30
+fingerprint_window = 25
 
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
 smooth_factor = 0.2
@@ -625,8 +625,10 @@ def rssi_to_distance_model():
                 distance = point_to_beacon_distances[point][beacon]
                 rssi_samples = calibration_data[point][beacon]
 
-                log_distances.append(math.log10(distance))
-                average_rssi.append(sum(rssi_samples) / len(rssi_samples))
+                #now use all samples
+                for rssi in rssi_samples:
+                    log_distances.append(math.log10(distance))
+                    average_rssi.append(rssi)
                 
             #linear regression 
             # y = Mx + C
@@ -657,8 +659,11 @@ def rssi_to_distance_model():
 
             #store model for beacon
             models[beacon] = (distance_spread, distance_to_rssi_relationship)
-                
+
+        for beacon, (c, m) in models.items():
+            print(f"{beacon}: C={c:.2f}  M={m:.2f}")       
         return models
+        
 
 #----------------------------------------------------------------------------END OF CALIBRATION--------------------------------------------------------------------------------#
 
@@ -695,6 +700,17 @@ def draw_map():
     cell_width = draw_width / 4  #width of a column or cell
     cell_height = draw_height / 4  #height of a row or cell
 
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #draw obstacle cells
+    for cell in obstacle_cells:
+        row, col = point_coordinates[cell]
+        cell_x0 = x0 + col * cell_draw_width
+        cell_y0 = y0 + row * cell_draw_height
+        map.create_rectangle(cell_x0, cell_y0, cell_x0 + cell_draw_width, cell_y0 + cell_draw_height,
+                             fill="#404040", outline="")
+
     #map.create_line(x_start, y_start, x_end, y_end)
     #vertical grid lines
     map.create_line(x0 + cell_width, y0, x0 + cell_width, y1)
@@ -706,10 +722,7 @@ def draw_map():
     map.create_line(x0, y0 + 2 * cell_height, x1, y0 + 2 * cell_height)
     map.create_line(x0, y0 + 3 * cell_height, x1, y0 + 3 * cell_height)
 
-    cell_draw_width = draw_width / 4
-    cell_draw_height = draw_height / 4
-
-    #draw obstacles
+    #draw obstacle edges
     for edge in obstacle_edges:
         cells = list(edge)
         r1, c1 = cells[0]
@@ -748,11 +761,14 @@ def save_map(filename):
 
     #turn into lists of lists
     edges = [list([list(cell) for cell in edge]) for edge in obstacle_edges]
+    #turn into list
+    cells = list(obstacle_cells)
 
     data = {"room_width": room_width,
             "room_height": room_height,
             "calibration_data": calibration_data,
-            "obstacle_edges": edges
+            "obstacle_edges": edges,
+            "obstacle_cells": cells
             }
         
     with open(filename, "w") as f:
@@ -762,7 +778,7 @@ def save_map(filename):
 
 #function to load a saved map
 def load_map(filename):
-    global room_width, room_height, calibration_data, models, current_point, collecting, obstacle_edges
+    global room_width, room_height, calibration_data, models, current_point, collecting, obstacle_edges, obstacle_cells
 
     #prevent calibration from runnning again
     current_point = max_point + 1
@@ -785,6 +801,9 @@ def load_map(filename):
     for edge in data.get("obstacle_edges", []):
         #turn back into frozenset
         obstacle_edges.add(frozenset([tuple(cell) for cell in edge]))
+
+    #obstacle cells
+    obstacle_cells = set(data.get("obstacle_cells", []))
 
     #calculate all the calibration data again
     calculate_distances(room_width, room_height)
@@ -851,6 +870,10 @@ def draw_dot_on_map(x_estimate, y_estimate):
                 current_cell = cell
                 break
         
+        #skip of obstacle cell
+        if current_cell in obstacle_cells:
+            return
+        
         #once arrived unselect cell and show message
         #make sure we have been there for the trheshold to avoid spikes 
         if current_cell == selected_cell and selected_cell is not None:
@@ -894,7 +917,7 @@ def on_map_click(event):
     #deselect or select
     if clicked_cell == selected_cell:
         selected_cell = None
-    else:
+    elif clicked_cell not in obstacle_cells:
         selected_cell = clicked_cell
 
     print("Cell clicked: ", clicked_cell)
@@ -918,10 +941,11 @@ def bfs_shortest_path(start, end):
         current = path[-1]
         current_row, current_col = point_coordinates[current]
 
-        
         for neighbour in neighbouring_cells_for_path[current]:
-            
-            
+            #skip obstacle cells
+            if neighbour in obstacle_cells:
+                continue
+
             #skip if obstacle edge between current cell and this neighbour
             neighbour_row, neighbour_col = point_coordinates[neighbour]
             edge = frozenset({(current_row, current_col), (neighbour_row, neighbour_col)})
@@ -1046,7 +1070,36 @@ def on_map_click_edit(event):
         draw_map()
         draw_shortest_path()
 
+#double click for creating an obstacle cell
+def on_map_double_click_edit(event):
+    global obstacle_cells
 
+    cell_draw_width = draw_width / 4
+    cell_draw_height = draw_height / 4
+
+    #prevent click being outside map
+    if not (x0 <= event.x <= x0 + draw_width and y0 <= event.y <= y0 + draw_height):
+        return
+
+    #get row and col
+    col = int((event.x - x0) / cell_draw_width)
+    row = int((event.y - y0) / cell_draw_height)
+    col = max(0, min(col, 3))
+    row = max(0, min(row, 3))
+
+    clicked_cell = None
+    for cell, (r, c) in point_coordinates.items():
+        if r == row and c == col:
+            clicked_cell = cell
+            break
+
+    if clicked_cell in obstacle_cells:
+        obstacle_cells.remove(clicked_cell)
+    else:
+        obstacle_cells.add(clicked_cell)
+
+    draw_map()
+    draw_shortest_path()
 #----------------------------------------------------------------------------END OF MAP----------------------------------------------------------------------------------------#
 
 #----------------------------------------------------------------------------TRILATERATION-------------------------------------------------------------------------------------#
