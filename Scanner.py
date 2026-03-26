@@ -1289,7 +1289,10 @@ image_frame = tk.Frame(root)
 image_frame.pack(pady=20)
 
 #image
-img = Image.open("C:/Users/joryl/Downloads/widthHeightDiss.png")
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+img_path = os.path.join(script_dir, "width_height_example.png")
+img = Image.open(img_path)
 img = img.resize((450, 300))
 img_tk = ImageTk.PhotoImage(img)
 image_label = tk.Label(image_frame, image=img_tk)
@@ -1301,7 +1304,8 @@ calibration_page = tk.Frame(root)
 calibration_page_title = tk.Label(calibration_page, text="Calibration", font=("Arial", 12, "normal"), pady=20)
 calibration_page_title.pack()
 #calibration image
-calibration_image = Image.open("C:/Users/joryl/Downloads/updated_calibration_example_image.png")
+calibration_img_path = os.path.join(script_dir, "updated_calibration_example_image.png")
+calibration_image = Image.open(calibration_img_path)
 calibration_image = calibration_image.resize((280, 200))
 calibration_image_tk = ImageTk.PhotoImage(calibration_image)
 calibration_image_label = tk.Label(calibration_page, image=calibration_image_tk)
