@@ -8,7 +8,7 @@ import math #for distance calc
 import json #for saving a map
 from tkinter import filedialog 
 from scipy.optimize import least_squares # for least squares function
-from scipy.stats import wasserstein_distance
+from scipy.stats import wasserstein_distance # for fingerprint matching
 
 #width and height variables of room
 room_width = None
@@ -24,7 +24,7 @@ obstacle_cells = set()
 #for shortest path
 current_cell = None
 selected_cell = None
-#to avoid spikes saying you've arrived
+#to avoid spikes saying you've arrived in path finding
 arrived_threshold = 3
 arrived_counter = 0
 
@@ -123,7 +123,7 @@ neighbouring_cells = {
     16: [9, 10, 15]
 }
 
-#no diagonals for path drawing
+#dictionary of neighbours for path finding, no diagonals
 neighbouring_cells_for_path = {
     1: [2, 8],
     2: [1, 3, 7],
@@ -143,7 +143,7 @@ neighbouring_cells_for_path = {
     16: [9, 15]
 }
 
-#MAC addresses of my BLE beacons and given name
+#MAC addresses of my BLE beacons and given names
 wanted_devices = {"48:87:2D:9D:55:81": "Alpha",
                   "48:87:2D:9D:55:9E": "Beta",
                   "48:87:2D:9D:55:CC": "Charlie",
@@ -159,32 +159,29 @@ fingerprint_rssi = {
     "Charlie": [],
     "Delta": []
 }
+#window size
+fingerprint_window = 25
 
-#for trilateration
+#for trilateration, live window and distance smoothing
 live_rssi = {
     "Alpha": [],
     "Beta": [],
     "Charlie": [],
     "Delta": []
 }
-
 distance_ema = {
     "Alpha": None,
     "Beta": None,
     "Charlie": None,
     "Delta": None
 }
-
 distance_smooth_factor = 0.3
-
-#for sliding window live raw rssi windown for trilateration
+#window size
 trilateration_window = 11
-
-#for sliding live raw rssi window to compare to fingerprints
-fingerprint_window = 25
 
 #smoothing factor for calculating EMA, lower is smoother + less responsive, higher is more responsive + less smooth
 smooth_factor = 0.2
+
 #each beacon's average rssi value
 alpha_rssi_avg = None
 beta_rssi_avg = None
@@ -192,7 +189,7 @@ charlie_rssi_avg = None
 delta_rssi_avg = None
 echo_rssi_avg = None
 
-#called whenever a BLE packet is received
+#called whenever a BLE packet is received, fills up rssi windows and then calls fingerprint matching or trilateration, and then fuses the guesses
 def processBLEpacket(device, advertisement_data):
     global alpha_rssi_avg
     global beta_rssi_avg
@@ -237,7 +234,7 @@ def processBLEpacket(device, advertisement_data):
             if len(fingerprint_rssi[name]) > fingerprint_window:
                 fingerprint_rssi[name].pop(0)
 
-        #exponential moving averages (EMA)
+        #exponential moving averages (EMA), just used for testing to show beacons are still working
         if name == 'Alpha':
             if alpha_rssi_avg is None:
                 alpha_rssi_avg = rssi
@@ -273,15 +270,14 @@ def processBLEpacket(device, advertisement_data):
                 echo_rssi_avg = smooth_factor * rssi + (1 - smooth_factor) * echo_rssi_avg
             print(f"{name} - RSSI: {echo_rssi_avg:.1f}")
 
-#----------------------------------------------------------------------------FINGER PRINTING-----------------------------------------------------------------------------------#
-        #only get the name beacons we want
+        #calibrating a room
         if (collecting == True) and name in calibration_data[current_point]:
 
-            #get raw rssi values rather than EMA until full
+            #get raw rssi values until full
             if len(calibration_data[current_point][name]) < samples_per_point:
                 calibration_data[current_point][name].append(rssi)
 
-            #get count for progress
+            #get count for progress tracking
             count = sum(len(calibration_data[current_point][i]) for i in ["Alpha", "Beta", "Charlie", "Delta"])
             #update gui
             counter.config(text=f"Samples collected: {count}/200")
@@ -321,7 +317,9 @@ def processBLEpacket(device, advertisement_data):
                 
 
             #trilateration
+            #translate rssi values into distances
             distances = rssi_to_distance_calculation(models)
+            #once we have all 4 beacons then trilaterate
             if len(distances) == 4:
                 trilateration_x, trilateration_y, trilateration_cost = trilateration(distances)
                 cell_width = room_width / 4
@@ -354,7 +352,7 @@ def processBLEpacket(device, advertisement_data):
 
             trilateration_cell = None
             if tri_row is not None and tri_column is not None:
-                draw_dot_on_map(trilateration_x, trilateration_y)
+                #draw_dot_on_map(trilateration_x, trilateration_y)
                 for cell, (row, col) in point_coordinates.items():
                     if row == tri_row and col == tri_column:
                         trilateration_cell = cell
@@ -421,9 +419,11 @@ def processBLEpacket(device, advertisement_data):
                     
                 return
 
+#----------------------------------------------------------------------------FINGER PRINTING-----------------------------------------------------------------------------------#
+
 #match live rssi to recorded rssi for each cell
 def fingerprint_matching(candidate_cells=None):
-    #for every cell in the room, compare live rssi average to fingerprint average, measure the error, average the error, keep cell with smallest error
+    #for every cell in the room, compare live window to entire calibration distribution
     most_likely_cell = None
     smallest_error = float("inf")
 
@@ -1219,8 +1219,7 @@ def trilateration(distances):
     #calculates difference between the guessed position and measured distance from each beacon
     def distance_errors(position):
 
-        #weights added in as further beacons become more noisy, so add more weight to closer beacons, using variance
-
+        #weights added in as further beacons become more noisy, so add more weight to closer beacons
         weight_power = 0.25
 
         wA = 1 / (dA**weight_power + 0.1)
@@ -1238,6 +1237,7 @@ def trilateration(distances):
     #run least squares function, set minx miny and max x max y
     result = least_squares(distance_errors, position, bounds=([0.0, 0.0], [room_width, room_height]))
 
+    #cost of least squares so how much error there was from each beacon
     tri_cost = result.cost
     print("cost: ", result.cost)
 
@@ -1248,7 +1248,6 @@ def trilateration(distances):
     print("X:", x_estimate)
     print("Y:", y_estimate)
 
-    #draw_dot_on_map(x_estimate, y_estimate)
     return x_estimate, y_estimate, tri_cost
 
 #----------------------------------------------------------------------------END OF TRILATERATION------------------------------------------------------------------------------#
