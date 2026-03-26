@@ -323,7 +323,7 @@ def processBLEpacket(device, advertisement_data):
             #trilateration
             distances = rssi_to_distance_calculation(models)
             if len(distances) == 4:
-                trilateration_x, trilateration_y = trilateration(distances)
+                trilateration_x, trilateration_y, trilateration_cost = trilateration(distances)
                 cell_width = room_width / 4
                 cell_height = room_height / 4
 
@@ -381,9 +381,13 @@ def processBLEpacket(device, advertisement_data):
                         cell_height = room_height / 4
                         fingerprint_x = (column + 0.5) * cell_width
                         fingerprint_y = (row + 0.5) * cell_height
-                        #get average x y from fingerporint x y and trilateration x, y (use weights)
-                        trilateration_weight = 0.65
-                        fingerprint_weight = 0.35
+                        #get average x y from fingerporint x y and trilateration x, y (use weights), based on trilateration cost
+                        if trilateration_cost < 8:
+                            trilateration_weight = 0.95
+                            fingerprint_weight = 0.05
+                        else:
+                            trilateration_weight = 0.7
+                            fingerprint_weight = 0.3
                         x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
                         y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
@@ -403,9 +407,13 @@ def processBLEpacket(device, advertisement_data):
                             cell_height = room_height / 4
                             fingerprint_x = (column + 0.5) * cell_width
                             fingerprint_y = (row + 0.5) * cell_height
-                            #get average x y from fingerporint x y and trilateration x, y (use weights)
-                            trilateration_weight = 0.65
-                            fingerprint_weight = 0.35
+                            #get average x y from fingerporint x y and trilateration x, y (use weights), based on tri cost
+                            if trilateration_cost < 8:
+                                trilateration_weight = 0.95
+                                fingerprint_weight = 0.05
+                            else:
+                                trilateration_weight = 0.7
+                                fingerprint_weight = 0.3
                             x = (fingerprint_weight * fingerprint_x) + (trilateration_weight * trilateration_x)
                             y = (fingerprint_weight * fingerprint_y) + (trilateration_weight * trilateration_y)
 
@@ -1194,7 +1202,7 @@ def trilateration(distances):
 
     # equation 3 (Delta - Alpha): -2x(width) -2y(height) + width^2 + height^2 - dD^2 - dA^2
     # equation 3: 
-    x2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*y1*room_height)) / (2*room_width)
+    x2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*y1*room_width)) / (2*room_width)
     y2 = (dA**2 - dD**2 + room_width**2 + room_height**2 - (2*x1*room_height)) / (2*room_height)
 
     #now that we have x1, x2 and y1, y2 we average these to find an x and y
@@ -1230,6 +1238,7 @@ def trilateration(distances):
     #run least squares function, set minx miny and max x max y
     result = least_squares(distance_errors, position, bounds=([0.0, 0.0], [room_width, room_height]))
 
+    tri_cost = result.cost
     print("cost: ", result.cost)
 
     #assign x and y estimates from returned object
@@ -1240,7 +1249,7 @@ def trilateration(distances):
     print("Y:", y_estimate)
 
     #draw_dot_on_map(x_estimate, y_estimate)
-    return x_estimate, y_estimate
+    return x_estimate, y_estimate, tri_cost
 
 #----------------------------------------------------------------------------END OF TRILATERATION------------------------------------------------------------------------------#
 
